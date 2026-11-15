@@ -49,6 +49,8 @@ export type Question = {
   meta: QuestionMeta;
   /** question.md */
   description: string;
+  /** question.md as HTML; added by `npm run content` for the site. */
+  descriptionHtml?: string;
   starter: JavaFiles;
   given: JavaFiles;
   /** Hidden harness sources; empty unless tests.kind is "harness". */

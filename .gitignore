@@ -54,3 +54,6 @@ next-env.d.ts
 
 # Built from content/ by npm run content (solutions are never in it)
 /generated/
+
+# Monaco's prebuilt files, copied from node_modules by scripts/copy-monaco.mjs
+/public/monaco/

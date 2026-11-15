@@ -1,5 +1,3 @@
-# Reference sheet
-
 ## Reading input
 
 | | |

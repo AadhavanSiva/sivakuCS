@@ -13,6 +13,8 @@ import { BrowserJava, type JavaStatus, type RuntimeInfo } from "./java/browser-j
 export type JavaRuntimeState = {
   /** "idle" until something asks for Java. */
   status: JavaStatus | "idle";
+  /** Which start attempt this is: 1, then 2 after an automatic retry, and so on. */
+  attempt: number;
   info: RuntimeInfo | null;
   /** Time from the first start until the JVM was ready (the cold start). */
   readyMs: number | null;
@@ -28,6 +30,7 @@ export type JavaRuntimeState = {
 
 const INITIAL: JavaRuntimeState = {
   status: "idle",
+  attempt: 0,
   info: null,
   readyMs: null,
   warmMs: null,
@@ -46,9 +49,10 @@ function update(change: Partial<JavaRuntimeState>) {
 /** The shared JVM, started if it is not already running. */
 export function getJava(): BrowserJava {
   if (!java) {
-    java = new BrowserJava({
-      onStatus: (status) => update({ status }),
-      onReady: (info, ms) => {
+    const events = {
+      onStatus: (status: JavaStatus) => update({ status }),
+      onAttempt: (attempt: number) => update({ attempt }),
+      onReady: (info: RuntimeInfo, ms: number) => {
         const runtimeChanged = info.javaVersion !== lock.javaRuntime;
         if (runtimeChanged) {
           console.warn(
@@ -59,11 +63,26 @@ export function getJava(): BrowserJava {
         // Only the first start is the cold start; restarts after Stop are not.
         update({ info, runtimeChanged, readyMs: state.readyMs ?? ms });
       },
-      onWarm: (ms) => update({ warmMs: state.warmMs ?? ms }),
-    });
+      onWarm: (ms: number) => update({ warmMs: state.warmMs ?? ms }),
+    };
+    java = new BrowserJava(events, { startTimeoutMs: startTimeoutOverride() });
     java.start();
   }
   return java;
+}
+
+/**
+ * For the browser tests: ?javaStartTimeoutMs=3000 in the page URL shortens
+ * the start-up limit, so a stalled start can be tested in seconds.
+ */
+function startTimeoutOverride(): number | undefined {
+  const value = Number(new URLSearchParams(window.location.search).get("javaStartTimeoutMs"));
+  return value > 0 ? value : undefined;
+}
+
+/** After Java failed to start: try again. */
+export function retryJava(): void {
+  java?.retry();
 }
 
 /** Starts loading Java in the background. Safe to call any number of times. */

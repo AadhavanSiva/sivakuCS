@@ -3,11 +3,10 @@
 Practice exams for Purdue CS 18000 (Java) that look, run and score like the
 real ones on Ed. Java compiles and runs entirely in the student's browser.
 
-**Status:** Milestones 1 and 2 of 5 are done: Java 25 compiles and runs in
-the browser (`/lab`), and questions are plain folders graded by the same code
-in the browser and in `npm run verify` (try it at `/lab/grade` in
-development). The exam workspace, accounts and the two practice exams come
-next.
+**Status:** Milestones 1 and 2 of 5 are done, and Milestone 3 (the exam
+workspace) is in progress: its layout, Run console, Test panel and
+instructions slide work at `/exams`. Autocomplete, the timer and the results
+page come next, then accounts and the two practice exams.
 
 Unofficial practice. Not affiliated with Purdue University or Ed.
 
@@ -78,7 +77,7 @@ Then open a new terminal and follow step 5 above.
 | `npm run typecheck` | Generates Next.js route types, then checks types with `tsc` |
 | `npm run content` | Bundles `content/` into `generated/content.json` for the site, without solutions. Runs by itself before `dev` and `build` |
 | `npm run verify` | Checks every question: its structure, that the reference solution passes every test, and that each broken solution fails a hidden one. Needs JDK 25 |
-| `npm run test:e2e` | Browser tests (Playwright, headless Chromium). Starts a dev server on port 3100 unless one is running there. The grading tests also need JDK 25 |
+| `npm run test:e2e` | Browser tests (Playwright, headless Chromium). Starts a dev server on port 3100 unless one is running there; with `npm run dev` already running, use `E2E_PORT=3000 npm run test:e2e`. The grading tests also need JDK 25. CI runs them on every push |
 | `npm run build:sandbox` | Rebuilds `public/cheerpj/sandbox.jar` from `java/sandbox` (needs JDK 25) |
 | `npm run check:cheerpj` | Fails if the CheerpJ runtime on its CDN no longer matches `cheerpj-lock.json` |
 
@@ -184,6 +183,34 @@ handling and file paths.
 - **Relative paths:** CheerpJ resolves `java.io` relative paths against
   `/files/` regardless of `user.dir`, so the program's working directory is
   `/files/` and `user.dir` is set to match.
+
+## The exam workspace
+
+`/exams` lists the exams; `/exams/<course>/<exam>` is an attempt, laid out
+like a coding challenge on the real exam (dark theme, sized for a 1366x768
+laptop):
+
+- **Top bar:** back to the exams, Prev / Next, the slide's title, Submit.
+- **Rail:** the instructions, then one button per question, marked ● once
+  tested and ✓ once every test passed.
+- **Left:** the question, then the exam's reference sheet.
+- **Right:** file tabs (read-only files locked), the editor (Monaco, served
+  from the site itself) and a status bar ("All changes saved").
+- **Below the editor:** **Run** compiles and runs `Main.java` in an
+  interactive console: output appears as it is printed and the student
+  types input while it runs (Ctrl+D ends input). Data files the question
+  provides, like `laps.txt`, are in the working directory. A run may use 10
+  seconds of computing; time spent waiting for input does not count.
+  **Test** grades the question, shows the results, and saves a checkpoint.
+- **Instructions slide:** the exam's length, questions and points, how
+  scoring works, and that Test saves a checkpoint. Java starts loading
+  here, behind a "Starting Java…" indicator. If it is not ready within 60
+  seconds it starts again by itself, allowing 120 seconds this time, and
+  after a second stall it offers a Retry button.
+
+The code, the checkpoints and the current slide are kept in the browser's
+local storage (`lib/attempt-storage.ts`), so a refresh resumes where the
+student was; Milestone 4 adds saving to an account.
 
 ## Owner decisions
 

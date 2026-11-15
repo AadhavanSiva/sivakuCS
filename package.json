@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "npm run content",
+    "predev": "npm run assets",
     "dev": "next dev",
-    "prebuild": "npm run content",
+    "prebuild": "npm run assets",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -14,9 +14,13 @@
     "check:cheerpj": "node scripts/check-cheerpj.mjs",
     "verify": "tsx scripts/verify.ts",
     "content": "tsx scripts/build-content.ts",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "assets": "npm run content && node scripts/copy-monaco.mjs"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "marked": "^18.2.0",
+    "monaco-editor": "^0.57.0",
     "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0"

@@ -123,6 +123,53 @@ export async function runProgram(java: JavaBackend, request: RunRequest): Promis
   }
 }
 
+export type InteractiveOutcome =
+  | { kind: "compile-error"; output: string; compileMs: number }
+  | { kind: "finished"; exitCode: number; outputTruncated: boolean; compileMs: number; runMs: number }
+  | { kind: "timeout"; timeLimitMs: number }
+  | { kind: "stopped" }
+  | { kind: "error"; message: string };
+
+export type ConsoleIO = {
+  /** Output as the program writes it. */
+  onOutput: (stream: "out" | "err", text: string) => void;
+  /** The program is (or is no longer) waiting for a typed line. */
+  onWaitingForInput: (waiting: boolean) => void;
+};
+
+/**
+ * Compiles and runs a program connected to a console: output arrives as it
+ * is written and input is typed while it runs (send lines with
+ * BrowserJava.sendInput). The time limit does not count time spent waiting
+ * for input. Browser only.
+ */
+export async function runInteractively(
+  java: JavaBackend,
+  request: Omit<RunRequest, "stdin">,
+  io: ConsoleIO,
+): Promise<InteractiveOutcome> {
+  const timeLimitMs = request.timeLimitMs ?? DEFAULT_TIME_LIMIT_MS;
+  try {
+    const compile = await compileFiles(java, request.files);
+    if (!compile.ok) return { kind: "compile-error", output: compile.output, compileMs: compile.ms };
+    await prepareWorkDir(java, request.inputFiles ?? {});
+    const json = await java.call("runInteractive", [sandboxDirs(java.paths).classes, request.mainClass ?? "Main"], {
+      activity: "running",
+      timeoutMs: timeLimitMs,
+      onOutput: io.onOutput,
+      onWaitingForInput: io.onWaitingForInput,
+    });
+    const run = JSON.parse(json!) as { exitCode: number; outputTruncated: boolean; ms: number };
+    return { kind: "finished", exitCode: run.exitCode, outputTruncated: run.outputTruncated, compileMs: compile.ms, runMs: run.ms };
+  } catch (error) {
+    if (error instanceof JavaTimeoutError) return { kind: "timeout", timeLimitMs };
+    if (error instanceof JavaStoppedError) return { kind: "stopped" };
+    return { kind: "error", message: error instanceof Error ? error.message : String(error) };
+  } finally {
+    io.onWaitingForInput(false);
+  }
+}
+
 /**
  * Splits text written as
  *   === Main.java ===

@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated or copied in by `npm run assets`; not our source.
+    "generated/**",
+    "public/monaco/**",
   ]),
 ]);
 

@@ -4,5 +4,7 @@
   "editable": [
     "Main.java"
   ],
-  "readOnly": []
+  "readOnly": [
+    "laps.txt"
+  ]
 }

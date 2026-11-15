@@ -33,4 +33,4 @@ Fastest: 61.20
 Average: 63.05
 ```
 
-The sample is one of the tests. The rest are hidden.
+Your workspace has this `laps.txt`, so **Run** reads it. The sample is one of the tests. The rest are hidden.

@@ -23,18 +23,20 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
-        {children}
-        <footer className="mt-auto px-6 py-4 text-center text-xs text-neutral-500">
-          <p>Unofficial practice. Not affiliated with Purdue University or Ed.</p>
+      {/* A full-height column: pages fill the space above a one-line footer
+          (the exam workspace exactly; other pages scroll inside it). */}
+      <body className="flex h-dvh flex-col">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{children}</div>
+        <footer className="flex h-7 shrink-0 items-center justify-center gap-1 border-t border-neutral-500/20 px-4 text-center text-[11px] text-neutral-500">
+          <span>Unofficial practice. Not affiliated with Purdue University or Ed.</span>
           {/* Attribution required by CheerpJ's Community licence; see README. */}
-          <p>
-            Built with{" "}
+          <span>
+            · Built with{" "}
             <a className="underline" href="https://cheerpj.com/" target="_blank" rel="noopener">
               CheerpJ
             </a>
             .
-          </p>
+          </span>
         </footer>
       </body>
     </html>

@@ -18,5 +18,8 @@ export type Exam = {
   meta: ExamMeta;
   /** reference.md */
   reference: string;
+  /** reference.md and meta.instructions as HTML; added by `npm run content` for the site. */
+  referenceHtml?: string;
+  instructionsHtml?: string;
   questions: Question[];
 };

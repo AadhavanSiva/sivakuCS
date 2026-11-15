@@ -15,6 +15,7 @@ export type SandboxMethod =
   | "compile"
   | "compileWith"
   | "run"
+  | "runInteractive"
   | "callHarness";
 
 export type SandboxPaths = {
@@ -37,6 +38,13 @@ export type CallOptions = {
   timeoutMs?: number;
   /** What the JVM is doing during the call, for status displays. */
   activity?: "compiling" | "running";
+  /**
+   * runInteractive only (browser): output as the program writes it, and
+   * whether it is waiting for a typed line. The time limit is paused while
+   * it waits.
+   */
+  onOutput?: (stream: "out" | "err", text: string) => void;
+  onWaitingForInput?: (waiting: boolean) => void;
 };
 
 export interface JavaBackend {

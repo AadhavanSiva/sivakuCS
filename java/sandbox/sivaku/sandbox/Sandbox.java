@@ -289,9 +289,49 @@ public final class Sandbox {
     public static String run(String classPath, String mainClass, String stdin) throws IOException {
         Capture out = new Capture();
         Capture err = new Capture();
-        int exitCode = 0;
         long start = System.nanoTime();
-        try (URLClassLoader loader = open(classPath, stdin, out, err)) {
+        int exitCode = launchMain(classPath, mainClass,
+                new ByteArrayInputStream(stdin.getBytes(StandardCharsets.UTF_8)), out, err);
+        long ms = (System.nanoTime() - start) / 1_000_000;
+        return "{\"exitCode\":" + exitCode
+                + ",\"stdout\":" + json(out.text())
+                + ",\"stderr\":" + json(err.text())
+                + ",\"stdoutTruncated\":" + out.truncated
+                + ",\"stderrTruncated\":" + err.truncated
+                + ",\"ms\":" + ms + "}";
+    }
+
+    /**
+     * Runs mainClass connected to the page, for the Run button's console:
+     * output goes to the page as it is written, and each read of standard
+     * input waits for the student to type a line. Browser only: the two
+     * native methods below are implemented by the worker.
+     *
+     * @return JSON {"exitCode", "outputTruncated", "ms"}; the output itself
+     *     has already been sent.
+     */
+    public static String runInteractive(String classPath, String mainClass) throws IOException {
+        HostOutput out = new HostOutput("out");
+        HostOutput err = new HostOutput("err");
+        long start = System.nanoTime();
+        int exitCode = launchMain(classPath, mainClass, new HostInput(), out, err);
+        long ms = (System.nanoTime() - start) / 1_000_000;
+        return "{\"exitCode\":" + exitCode
+                + ",\"outputTruncated\":" + (out.truncated || err.truncated)
+                + ",\"ms\":" + ms + "}";
+    }
+
+    /** Sends output to the page ("out" or "err"). Implemented in the worker. */
+    private static native void hostWrite(String stream, String text);
+
+    /** Waits for the student to type a line; null when they end the input. Implemented in the worker. */
+    private static native String hostReadLine();
+
+    /** Runs main with these streams and returns the exit code, reporting failures as the java launcher does. */
+    private static int launchMain(String classPath, String mainClass, InputStream in, OutputStream out, OutputStream err)
+            throws IOException {
+        int exitCode = 0;
+        try (URLClassLoader loader = open(classPath, in, out, err)) {
             launch(loader.loadClass(mainClass));
         } catch (InvocationTargetException e) {
             if (e.getCause() instanceof ExitSignal exit) {
@@ -313,13 +353,7 @@ public final class Sandbox {
         } finally {
             close();
         }
-        long ms = (System.nanoTime() - start) / 1_000_000;
-        return "{\"exitCode\":" + exitCode
-                + ",\"stdout\":" + json(out.text())
-                + ",\"stderr\":" + json(err.text())
-                + ",\"stdoutTruncated\":" + out.truncated
-                + ",\"stderrTruncated\":" + err.truncated
-                + ",\"ms\":" + ms + "}";
+        return exitCode;
     }
 
     /**
@@ -337,7 +371,7 @@ public final class Sandbox {
         Capture err = new Capture();
         String reason = null;
         long start = System.nanoTime();
-        try (URLClassLoader loader = open(classPath, "", out, err)) {
+        try (URLClassLoader loader = open(classPath, InputStream.nullInputStream(), out, err)) {
             Method test = loader.loadClass(harnessClass).getMethod(method);
             if (!Modifier.isStatic(test.getModifiers())) {
                 throw new NoSuchMethodException(harnessClass + "." + method + " is not static");
@@ -376,8 +410,9 @@ public final class Sandbox {
     }
 
     /** Points the shared streams at this run's input and capture, and opens its class loader. */
-    private static URLClassLoader open(String classPath, String stdin, Capture out, Capture err) throws IOException {
-        STDIN.use(new ByteArrayInputStream(stdin.getBytes(StandardCharsets.UTF_8)));
+    private static URLClassLoader open(String classPath, InputStream in, OutputStream out, OutputStream err)
+            throws IOException {
+        STDIN.use(in);
         STDOUT.use(out);
         STDERR.use(err);
         List<URL> urls = new ArrayList<>();
@@ -484,6 +519,105 @@ public final class Sandbox {
             }
         }
         return b.append('"').toString();
+    }
+
+    /**
+     * Sends a run's output to the page on every flush (each println, before
+     * each read of input, and at the end), up to MAX_CAPTURE bytes in all.
+     */
+    private static final class HostOutput extends OutputStream {
+        private final String stream;
+        private final ByteArrayOutputStream pending = new ByteArrayOutputStream();
+        private int sent;
+        private boolean truncated;
+
+        HostOutput(String stream) {
+            this.stream = stream;
+        }
+
+        @Override
+        public synchronized void write(int b) {
+            write(new byte[] {(byte) b}, 0, 1);
+        }
+
+        @Override
+        public synchronized void write(byte[] b, int off, int len) {
+            int room = MAX_CAPTURE - sent - pending.size();
+            if (len > room) {
+                len = Math.max(room, 0);
+                if (!truncated) {
+                    truncated = true;
+                    pending.write(b, off, len);
+                    flush();
+                    hostWrite(stream, "\n[Output cut off at 1 MB]\n");
+                    return;
+                }
+            }
+            pending.write(b, off, len);
+            if (pending.size() >= 8192) {
+                flush();
+            }
+        }
+
+        @Override
+        public synchronized void flush() {
+            if (pending.size() > 0) {
+                sent += pending.size();
+                hostWrite(stream, pending.toString(StandardCharsets.UTF_8));
+                pending.reset();
+            }
+        }
+    }
+
+    /** Standard input typed by the student, one line at a time, asked for only when the program reads. */
+    private static final class HostInput extends InputStream {
+        private byte[] line = new byte[0];
+        private int pos;
+        private boolean ended;
+
+        private boolean fill() {
+            if (pos < line.length) {
+                return true;
+            }
+            if (ended) {
+                return false;
+            }
+            // Show any prompt before waiting for the answer.
+            System.out.flush();
+            System.err.flush();
+            String typed = hostReadLine();
+            if (typed == null) {
+                ended = true;
+                return false;
+            }
+            line = (typed + "\n").getBytes(StandardCharsets.UTF_8);
+            pos = 0;
+            return true;
+        }
+
+        @Override
+        public synchronized int read() {
+            return fill() ? line[pos++] & 0xff : -1;
+        }
+
+        @Override
+        public synchronized int read(byte[] b, int off, int len) {
+            if (len == 0) {
+                return 0;
+            }
+            if (!fill()) {
+                return -1;
+            }
+            int n = Math.min(len, line.length - pos);
+            System.arraycopy(line, pos, b, off, n);
+            pos += n;
+            return n;
+        }
+
+        @Override
+        public synchronized int available() {
+            return line.length - pos;
+        }
     }
 
     /** Collects a run's output up to MAX_CAPTURE bytes, so a print loop cannot exhaust memory. */

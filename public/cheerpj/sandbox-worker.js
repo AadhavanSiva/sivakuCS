@@ -8,10 +8,15 @@
 // a local JDK).
 //
 // Messages in:  { id, method, args }              one Sandbox call
+//               { type: "input", line }           a line typed into the Run
+//                                                 console (null: end of input)
 // Messages out: { type: "ready", info, ms }       JVM loaded
 //               { type: "warm", ms }              compiler warmed up
 //               { type: "fatal", message }        the JVM could not start
 //               { id, type: "started" }           the call began executing
+//               { id, type: "output", stream, text }   runInteractive output
+//               { id, type: "input-wait" }        runInteractive is waiting
+//               { id, type: "input-resumed" }     ... and got its line
 //               { id, type: "result", value }     its return value
 //               { id, type: "error", message }    it threw
 importScripts("https://cjrtnc.leaningtech.com/5.0/loader.js");
@@ -25,14 +30,39 @@ const OWN = ".sivaku";
 
 const METHODS = new Set([
   "info", "reset", "clearExcept", "writeFile", "readFile", "readTree",
-  "compile", "compileWith", "run", "callHarness",
+  "compile", "compileWith", "run", "runInteractive", "callHarness",
 ]);
 
 let Sandbox;
 
+// The interactive run in progress: its call id, lines typed ahead of the
+// program asking for them, and the program's pending read, if any.
+let interactiveId = null;
+let typedAhead = [];
+let waitingForLine = null;
+
+function nextLine() {
+  if (typedAhead.length > 0) return Promise.resolve(typedAhead.shift());
+  return new Promise((resolve) => (waitingForLine = resolve));
+}
+
+// Native methods of sivaku.sandbox.Sandbox, used by runInteractive. A Java
+// thread calling one waits until the returned Promise settles.
+const natives = {
+  async Java_sivaku_sandbox_Sandbox_hostWrite(lib, stream, text) {
+    postMessage({ id: interactiveId, type: "output", stream, text });
+  },
+  async Java_sivaku_sandbox_Sandbox_hostReadLine() {
+    postMessage({ id: interactiveId, type: "input-wait" });
+    const line = await nextLine();
+    postMessage({ id: interactiveId, type: "input-resumed" });
+    return line;
+  },
+};
+
 const ready = (async () => {
   const started = performance.now();
-  await cheerpjInit({ version: 25, status: "none", javaProperties: [`user.dir=${WORK}`] });
+  await cheerpjInit({ version: 25, status: "none", javaProperties: [`user.dir=${WORK}`], natives });
   const lib = await cheerpjRunLibrary("/app/cheerpj/sandbox.jar");
   Sandbox = await lib.sivaku.sandbox.Sandbox;
   const info = JSON.parse(await Sandbox.info());
@@ -109,10 +139,29 @@ function describe(e) {
 }
 
 onmessage = (event) => {
+  // Typed input goes straight to the running program, not into the queue
+  // behind it.
+  if (event.data.type === "input") {
+    const line = event.data.line ?? null;
+    if (waitingForLine) {
+      const resolve = waitingForLine;
+      waitingForLine = null;
+      resolve(line);
+    } else {
+      typedAhead.push(line);
+    }
+    return;
+  }
+
   const { id, method, args = [] } = event.data;
   queue = queue
     .then(async () => {
       if (!METHODS.has(method)) throw new Error(`Unknown sandbox method: ${method}`);
+      if (method === "runInteractive") {
+        interactiveId = id;
+        typedAhead = [];
+        waitingForLine = null;
+      }
       postMessage({ id, type: "started" });
       const value = await Sandbox[method](...args.map(String));
       postMessage({ id, type: "result", value: value == null ? null : String(value) });
