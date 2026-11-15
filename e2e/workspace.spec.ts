@@ -4,6 +4,7 @@
 // Test grades and saves a checkpoint, read-only files are locked, and a
 // refresh restores the code and the marks.
 import { expect, test, type Page } from "@playwright/test";
+import { openExam } from "./helpers";
 import { readFileSync } from "node:fs";
 
 const EXAM = "/exams/cs180/samples";
@@ -51,13 +52,16 @@ test.beforeEach(async ({ page }) => {
 
 test("the instructions slide shows the exam and starts Java", async ({ page }) => {
   await page.getByTestId("exam-cs180/samples").click();
+  // Java starts loading as the exam opens, even before the timer question is answered.
+  await expect(page.getByTestId("timer-prompt")).toContainText("Do you want a 60-minute timer?");
+  await expect(page.getByTestId("starting-java")).toBeAttached();
+  await page.getByTestId("timer-no").click();
   await expect(page.getByTestId("slide-title")).toHaveText("Exam instructions");
   await expect(page.getByTestId("exam-facts")).toContainText("60 minutes");
+  await expect(page.getByTestId("timer-mode")).toHaveText("No timer");
   await expect(page.getByTestId("exam-facts")).toContainText("4 questions");
   await expect(page.getByTestId("exam-facts")).toContainText("31 points");
   await expect(page.getByText("saves a checkpoint")).toBeVisible();
-  // Java starts loading here, before any question is opened.
-  await expect(page.getByTestId("starting-java")).toBeVisible();
   await expect(page.getByTestId("java-ready")).toBeVisible({ timeout: JVM_START_TIMEOUT });
 
   await page.getByTestId("start-exam").click();
@@ -69,7 +73,7 @@ test("the instructions slide shows the exam and starts Java", async ({ page }) =
 });
 
 test("a question fits the screen with every part in view", async ({ page }) => {
-  await page.goto(`${EXAM}#1`);
+  await openExam(page, `${EXAM}#1`);
   await expect(page.locator(".monaco-editor").first()).toBeVisible({ timeout: 60_000 });
   for (const id of ["slide-title", "rail-0", "rail-4", "section-description", "question-description", "tab-Main.java", "file-path", "save-status", "indentation", "run", "test", "panel-console", "console-output"]) {
     await expect(page.getByTestId(id), id).toBeInViewport();
@@ -85,7 +89,7 @@ test("a question fits the screen with every part in view", async ({ page }) => {
 });
 
 test("Run is an interactive console", async ({ page }) => {
-  await page.goto(`${EXAM}#1`);
+  await openExam(page, `${EXAM}#1`);
   await setFile(page, `${TICKET}/Main.java`, TICKET_SOLUTION);
   await javaReady(page);
   await page.getByTestId("run").click();
@@ -107,7 +111,7 @@ test("Run is an interactive console", async ({ page }) => {
 });
 
 test("Stop ends a program that is still running", async ({ page }) => {
-  await page.goto(`${EXAM}#1`);
+  await openExam(page, `${EXAM}#1`);
   await setFile(page, `${TICKET}/Main.java`, "public class Main {\n    public static void main(String[] args) {\n        while (true) { }\n    }\n}\n");
   await javaReady(page);
   await page.getByTestId("run").click();
@@ -118,7 +122,7 @@ test("Stop ends a program that is still running", async ({ page }) => {
 });
 
 test("Test grades, marks the question done, and a refresh restores everything", async ({ page }) => {
-  await page.goto(`${EXAM}#1`);
+  await openExam(page, `${EXAM}#1`);
   await setFile(page, `${TICKET}/Main.java`, TICKET_SOLUTION);
   await expect(page.getByTestId("save-status")).toHaveText("All changes saved");
   await javaReady(page);
@@ -138,7 +142,7 @@ test("Test grades, marks the question done, and a refresh restores everything", 
 });
 
 test("void main() with no class compiles, runs and grades one test per output line", async ({ page }) => {
-  await page.goto(`${EXAM}#4`);
+  await openExam(page, `${EXAM}#4`);
   await expect(page.getByTestId("slide-title")).toHaveText("Q4: Word count");
   expect(WORDS_SOLUTION).toMatch(/^void main\(\) \{/);
   await setFile(page, `${WORDS}/Main.java`, WORDS_SOLUTION);
@@ -175,8 +179,29 @@ test("void main() with no class compiles, runs and grades one test per output li
   await expect(hiddenFailure.getByTestId("testcase-toggle")).toHaveCount(0);
 });
 
+test("leaving the exam and coming back keeps the editor working", async ({ page }) => {
+  // Next.js keeps a visited page alive in the background; the editor must
+  // come back to life with it, not crash on its disposed predecessor.
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await openExam(page, `${EXAM}#1`);
+  await setFile(page, `${TICKET}/Main.java`, TICKET_SOLUTION);
+  for (let round = 0; round < 2; round++) {
+    await page.getByTestId("back-to-exams").click();
+    await page.getByTestId("exam-cs180/samples").click();
+    await expect(page.getByTestId("slide-title")).toHaveText("Q1: Ticket price");
+    await expect(page.locator(".monaco-editor")).toHaveCount(1);
+  }
+  expect(await fileText(page, `${TICKET}/Main.java`)).toBe(TICKET_SOLUTION);
+  await page.locator(".monaco-editor").first().click();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.type("// still editable");
+  expect(await fileText(page, `${TICKET}/Main.java`)).toContain("// still editable");
+  expect(errors).toEqual([]);
+});
+
 test("read-only files are locked tabs", async ({ page }) => {
-  await page.goto(`${EXAM}#3`);
+  await openExam(page, `${EXAM}#3`);
   await expect(page.getByTestId("slide-title")).toHaveText("Q3: Playlist");
   await expect(page.getByTestId("tab-Playlist.java")).toHaveAttribute("data-locked", "false");
   for (const name of ["Main.java", "Song.java", "Track.java"]) {
@@ -204,7 +229,7 @@ test("a stalled Java start is retried by itself", async ({ page }) => {
     await route.continue();
   });
   // 8 s for the stalled first try; the retry gets twice that, room for a cold start.
-  await page.goto(`${EXAM}?javaStartTimeoutMs=8000`);
+  await openExam(page, `${EXAM}?javaStartTimeoutMs=8000`);
   await expect(page.getByTestId("starting-java")).toHaveText("Starting Java… (trying again)", { timeout: 30_000 });
   await expect(page.getByTestId("java-ready")).toBeVisible({ timeout: JVM_START_TIMEOUT });
   expect(requests).toBe(2);

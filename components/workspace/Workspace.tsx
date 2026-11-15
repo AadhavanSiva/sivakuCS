@@ -1,8 +1,21 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { type AttemptState, type Checkpoint, loadAttempt, saveAttempt } from "@/lib/attempt-storage";
+import {
+  type AttemptState,
+  type Checkpoint,
+  clearAttempt,
+  loadAttempt,
+  newAttempt,
+  saveAttempt,
+} from "@/lib/attempt-storage";
 import type { Exam } from "@/lib/content/types";
+import { gradeExam } from "@/lib/grading/submit";
+import { getJava } from "@/lib/java-runtime";
+import { Countdown } from "./Countdown";
+import { DIALOG_DANGER, DIALOG_PRIMARY, DIALOG_SECONDARY, Dialog } from "./Dialog";
 import { InstructionsSlide } from "./InstructionsSlide";
 import { QuestionSlide, type SaveStatus } from "./QuestionSlide";
 import { SlideRail } from "./SlideRail";
@@ -18,16 +31,28 @@ function slideFromHash(slides: number): number | null {
 
 /**
  * An exam attempt, laid out like a coding challenge: slide rail, question
- * and reference sheet on the left, files and editor on the right, Run
- * console and Test panel below. Everything the student does is kept in
- * this browser (lib/attempt-storage.ts), so a refresh resumes where they were.
+ * and feedback on the left, files and editor on the right, the console
+ * below. It starts by asking whether to time the attempt; a timed one
+ * counts down in the top bar and is submitted when time runs out. After
+ * Submit, the submitted code stays here, read-only, and the results have
+ * their own page. Everything is kept in this browser
+ * (lib/attempt-storage.ts), so a refresh resumes where the student was,
+ * with the same time left.
  */
 export function Workspace({ exam }: { exam: Exam }) {
+  const router = useRouter();
   const slides = exam.questions.length + 1;
   const [attempt, setAttempt] = useState<AttemptState | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
+  const [timeUp, setTimeUp] = useState(false);
+  const [confirmingSubmit, setConfirmingSubmit] = useState(false);
+  const [confirmingRestart, setConfirmingRestart] = useState(false);
+  /** The question being graded while submitting, or null when not submitting. */
+  const [gradingQuestion, setGradingQuestion] = useState<number | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const latest = useRef<AttemptState | null>(null);
+  const submitInProgress = useRef(false);
 
   // localStorage exists only in the browser, so the attempt is read after the first render.
   useEffect(() => {
@@ -81,29 +106,136 @@ export function Workspace({ exam }: { exam: Exam }) {
     [slides, update],
   );
 
+  /** Grades every question as it stands and records the submission. */
+  const submit = useCallback(
+    async (automatic: boolean) => {
+      const current = latest.current;
+      if (!current || current.submission || submitInProgress.current) return;
+      submitInProgress.current = true;
+      setConfirmingSubmit(false);
+      setSubmitError(null);
+      // Recorded first, so a refresh while grading resumes the submission.
+      update((state) => ({ ...state, submitting: state.submitting ?? { at: Date.now(), automatic } }));
+      const java = getJava();
+      // A Run or Test still going ends here; the code is final.
+      java.stop();
+      setGradingQuestion(1);
+      try {
+        const graded = await gradeExam(java, exam, latest.current!.files, setGradingQuestion);
+        update((state) => ({
+          ...state,
+          submitting: undefined,
+          submission: { at: Date.now(), automatic: state.submitting?.automatic ?? automatic, ...graded },
+        }));
+        router.push(`/exams/${exam.id}/results`);
+      } catch (error) {
+        setSubmitError(error instanceof Error ? error.message : String(error));
+      } finally {
+        submitInProgress.current = false;
+        setGradingQuestion(null);
+      }
+    },
+    [exam, router, update],
+  );
+
+  // A submission that a refresh interrupted carries on.
+  const resumed = useRef(false);
+  useEffect(() => {
+    if (!attempt || resumed.current) return;
+    resumed.current = true;
+    if (!attempt.submitting || attempt.submission) return;
+    const automatic = attempt.submitting.automatic;
+    const timer = setTimeout(() => void submit(automatic), 0);
+    return () => clearTimeout(timer);
+  }, [attempt, submit]);
+
+  const onTimeUp = useCallback(() => {
+    setTimeUp(true);
+    void submit(true);
+  }, [submit]);
+
+  function chooseTimer(timed: boolean) {
+    const now = Date.now();
+    update((state) => ({
+      ...state,
+      timer: { timed, startedAt: now, deadline: timed ? now + exam.meta.minutes * 60_000 : undefined },
+    }));
+  }
+
+  function startNewAttempt() {
+    clearAttempt(exam.id);
+    const fresh = newAttempt();
+    latest.current = fresh;
+    setAttempt(fresh);
+    setTimeUp(false);
+    setConfirmingRestart(false);
+    setSubmitError(null);
+    window.history.replaceState(null, "", "#0");
+    saveNow();
+  }
+
   if (!attempt) {
     return <div className="flex-1 bg-[#1e1e1e]" aria-busy="true" />;
   }
 
-  const { slide } = attempt;
+  const { slide, timer, submission, submitting } = attempt;
   const question = slide > 0 ? exam.questions[slide - 1] : null;
   const title = question ? `Q${slide}: ${question.meta.title}` : "Exam instructions";
+  const submitted = Boolean(submission);
+  // Code is locked once submitted, while submitting, and when time is up.
+  const locked = submitted || Boolean(submitting) || gradingQuestion !== null || timeUp;
+  const lockReason = submitted
+    ? "Submitted: read-only"
+    : timeUp
+      ? "Time is up: read-only"
+      : locked
+        ? "Submitting: read-only"
+        : undefined;
+  const filesOf = (id: string) => (submission ? submission.files[id] : attempt.files[id]) ?? {};
+
+  const topRight = submitted ? (
+    <>
+      <span data-testid="submitted-badge" className="text-[13px] text-neutral-400">
+        Submitted
+      </span>
+      <Link href={`/exams/${exam.id}/results`} data-testid="view-results" className="rounded border border-[#4a4a4a] px-3 py-1 text-neutral-200 hover:bg-[#383838]">
+        Results
+      </Link>
+    </>
+  ) : (
+    <>
+      {timer?.timed && timer.deadline !== undefined && <Countdown deadline={timer.deadline} onExpire={onTimeUp} />}
+      <button
+        type="button"
+        data-testid="submit"
+        className="rounded bg-emerald-600 px-3 py-1 font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+        disabled={!timer || locked}
+        onClick={() => setConfirmingSubmit(true)}
+      >
+        Submit
+      </button>
+    </>
+  );
 
   return (
     <div data-testid="workspace" data-theme="exam" className="flex min-h-0 flex-1 flex-col bg-[#1e1e1e] text-neutral-200">
-      <TopBar title={title} slide={slide} slides={slides} onSelect={select} />
+      <TopBar title={title} slide={slide} slides={slides} onSelect={select}>
+        {topRight}
+      </TopBar>
       <div className="flex min-h-0 flex-1">
         <SlideRail questions={exam.questions} checkpoints={attempt.checkpoints} slide={slide} onSelect={select} />
         {question ? (
           <QuestionSlide
             key={question.id}
+            attemptId={attempt.id}
             question={question}
             number={slide}
             referenceHtml={exam.referenceHtml ?? ""}
             referenceApi={exam.referenceApi ?? []}
-            studentFiles={attempt.files[question.id] ?? {}}
+            studentFiles={filesOf(question.id)}
             checkpoint={attempt.checkpoints[question.id]}
             saveStatus={saveStatus}
+            lockReason={lockReason}
             onEdit={(name, text) =>
               update(
                 (state) => ({
@@ -119,9 +251,107 @@ export function Workspace({ exam }: { exam: Exam }) {
             }
           />
         ) : (
-          <InstructionsSlide exam={exam} onStart={() => select(1)} />
+          <InstructionsSlide
+            exam={exam}
+            timer={timer}
+            submitted={submitted}
+            onStart={() => select(1)}
+            onNewAttempt={() => setConfirmingRestart(true)}
+          />
         )}
       </div>
+
+      {!timer && !submitted && (
+        <Dialog
+          title={`Do you want a ${exam.meta.minutes}-minute timer?`}
+          testid="timer-prompt"
+          actions={
+            <>
+              <button type="button" data-testid="timer-yes" className={DIALOG_PRIMARY} onClick={() => chooseTimer(true)}>
+                Yes, time me
+              </button>
+              <button type="button" data-testid="timer-no" className={DIALOG_SECONDARY} onClick={() => chooseTimer(false)}>
+                No timer
+              </button>
+            </>
+          }
+        >
+          <p>
+            <strong>Timed:</strong> a {exam.meta.minutes}-minute countdown runs in the top bar from now, as on the real
+            exam. When it reaches zero, your code is locked and submitted for you. Leaving or refreshing the page does not
+            stop the clock.
+          </p>
+          <p>
+            <strong>No timer:</strong> work at your own pace and submit when you are ready.
+          </p>
+        </Dialog>
+      )}
+
+      {confirmingSubmit && (
+        <Dialog
+          title="Submit your exam?"
+          testid="submit-confirm"
+          onDismiss={() => setConfirmingSubmit(false)}
+          actions={
+            <>
+              <button type="button" data-testid="submit-cancel" className={DIALOG_SECONDARY} onClick={() => setConfirmingSubmit(false)}>
+                Keep working
+              </button>
+              <button type="button" data-testid="submit-confirm-yes" className={DIALOG_PRIMARY} onClick={() => void submit(false)}>
+                Submit
+              </button>
+            </>
+          }
+        >
+          <p>
+            This ends the attempt. Every question is graded as your code stands now, and you will not be able to change
+            it afterwards.
+          </p>
+        </Dialog>
+      )}
+
+      {(gradingQuestion !== null || submitError) && (
+        <Dialog
+          title={timeUp || submitting?.automatic ? "Time is up" : "Submitting"}
+          testid="submitting"
+          actions={
+            submitError ? (
+              <button type="button" className={DIALOG_PRIMARY} onClick={() => void submit(submitting?.automatic ?? timeUp)}>
+                Try again
+              </button>
+            ) : null
+          }
+        >
+          {submitError ? (
+            <p className="text-rose-400">Your exam could not be graded: {submitError}</p>
+          ) : (
+            <p data-testid="submitting-progress">
+              {timeUp || submitting?.automatic ? "Your code is locked and being submitted. " : ""}
+              Grading question {gradingQuestion} of {exam.questions.length}…
+            </p>
+          )}
+        </Dialog>
+      )}
+
+      {confirmingRestart && (
+        <Dialog
+          title="Start a new attempt?"
+          testid="restart-confirm"
+          onDismiss={() => setConfirmingRestart(false)}
+          actions={
+            <>
+              <button type="button" className={DIALOG_SECONDARY} onClick={() => setConfirmingRestart(false)}>
+                Cancel
+              </button>
+              <button type="button" data-testid="restart-confirm-yes" className={DIALOG_DANGER} onClick={startNewAttempt}>
+                Start again
+              </button>
+            </>
+          }
+        >
+          <p>Your submitted code and results for this exam are cleared, and you start from the beginning.</p>
+        </Dialog>
+      )}
     </div>
   );
 }

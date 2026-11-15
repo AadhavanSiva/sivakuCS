@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Collapsible } from "@/components/Collapsible";
 import { StartingJava } from "@/components/StartingJava";
 import { Testcases } from "@/components/Testcases";
 import type { ApiMember } from "@/lib/autocomplete/reference-api";
@@ -16,6 +17,8 @@ import { RunConsole, type RunConsoleHandle } from "./RunConsole";
 export type SaveStatus = "saved" | "saving" | "failed";
 
 type Props = {
+  /** Keys the editor's buffers, so a new attempt starts from fresh ones. */
+  attemptId: string;
   question: Question;
   number: number;
   referenceHtml: string;
@@ -25,6 +28,8 @@ type Props = {
   studentFiles: JavaFiles;
   checkpoint: Checkpoint | undefined;
   saveStatus: SaveStatus;
+  /** Set when the code cannot be changed (time is up, or submitted): every file is read-only and Run and Test are off. */
+  lockReason?: string;
   onEdit: (name: string, text: string) => void;
   onSaveNow: () => void;
   onTested: (checkpoint: Checkpoint) => void;
@@ -36,7 +41,8 @@ type Props = {
  * bar, and the console with Run and Test.
  */
 export function QuestionSlide(props: Props) {
-  const { question, number, referenceHtml, referenceApi, studentFiles, checkpoint, saveStatus, onEdit, onSaveNow, onTested } = props;
+  const { attemptId, question, number, referenceHtml, referenceApi, studentFiles, checkpoint, saveStatus, lockReason, onEdit, onSaveNow, onTested } = props;
+  const locked = lockReason !== undefined;
   const { meta } = question;
   const tabs = [...meta.editable, ...meta.readOnly];
   const [activeTab, setActiveTab] = useState(tabs[0]);
@@ -87,7 +93,7 @@ export function QuestionSlide(props: Props) {
   return (
     <div className="flex min-h-0 min-w-0 flex-1">
       <div className="w-[40%] min-w-[18rem] overflow-y-auto border-r border-[#3c3c3c] bg-[#1f1f1f]">
-        <PaneSection title="Description" open={descriptionOpen} onToggle={() => setDescriptionOpen(!descriptionOpen)} testid="section-description">
+        <Collapsible title="Description" open={descriptionOpen} onToggle={() => setDescriptionOpen(!descriptionOpen)} testid="section-description">
           <article
             data-testid="question-description"
             className="content-html"
@@ -95,8 +101,8 @@ export function QuestionSlide(props: Props) {
           />
           <h2 className="mb-2 mt-6 border-t border-[#3c3c3c] pt-4 text-sm font-semibold text-neutral-300">Reference sheet</h2>
           <article data-testid="reference-sheet" className="content-html" dangerouslySetInnerHTML={{ __html: referenceHtml }} />
-        </PaneSection>
-        <PaneSection
+        </Collapsible>
+        <Collapsible
           ref={feedback}
           title="Feedback"
           open={feedbackOpen}
@@ -114,7 +120,7 @@ export function QuestionSlide(props: Props) {
           {!testing && !testError && !checkpoint && (
             <p className="text-sm text-neutral-500">Press Test to run the tests for question {number}. Results appear here.</p>
           )}
-        </PaneSection>
+        </Collapsible>
       </div>
 
       <section aria-label="Code" className="flex min-w-0 flex-1 flex-col bg-[#1e1e1e]">
@@ -150,9 +156,9 @@ export function QuestionSlide(props: Props) {
             name === activeTab ? (
               <JavaEditor
                 key={name}
-                path={`${question.id}/${name}`}
+                path={`${attemptId}/${question.id}/${name}`}
                 initialText={textOf(name)}
-                readOnly={!editable.has(name)}
+                readOnly={locked || !editable.has(name)}
                 onChange={(text) => onEdit(name, text)}
                 onSave={onSaveNow}
               />
@@ -162,6 +168,11 @@ export function QuestionSlide(props: Props) {
 
         <div className="flex h-6 shrink-0 items-center gap-4 border-t border-[#3c3c3c] bg-[#252526] px-3 font-mono text-[12px] text-neutral-400">
           <span data-testid="file-path">/home/{activeTab}</span>
+          {lockReason && (
+            <span data-testid="lock-reason" className="font-sans text-amber-400">
+              🔒 {lockReason}
+            </span>
+          )}
           <span className="ml-auto font-sans" data-testid="save-status" data-status={saveStatus}>
             {saveStatus === "saved" && "All changes saved"}
             {saveStatus === "saving" && "Saving…"}
@@ -186,7 +197,7 @@ export function QuestionSlide(props: Props) {
                   type="button"
                   data-testid="run"
                   className={TEXT_BUTTON}
-                  disabled={!canRun || testing || javaBroken}
+                  disabled={!canRun || testing || javaBroken || locked}
                   title={canRun ? `Compile and run ${mainClass}.java` : `This question has no ${mainClass}.java to run`}
                   onClick={() => runConsole.current?.run()}
                 >
@@ -197,7 +208,7 @@ export function QuestionSlide(props: Props) {
                 type="button"
                 data-testid="test"
                 className={TEXT_BUTTON}
-                disabled={running || testing || javaBroken}
+                disabled={running || testing || javaBroken || locked}
                 title="Run the tests and save a checkpoint"
                 onClick={test}
               >
@@ -211,37 +222,6 @@ export function QuestionSlide(props: Props) {
         </div>
       </section>
     </div>
-  );
-}
-
-type PaneSectionProps = {
-  title: string;
-  open: boolean;
-  onToggle: () => void;
-  testid: string;
-  children: React.ReactNode;
-  ref?: React.Ref<HTMLElement>;
-};
-
-/** A collapsible section of the left pane. */
-function PaneSection({ title, open, onToggle, testid, children, ref }: PaneSectionProps) {
-  return (
-    <section ref={ref} data-testid={testid} className="border-b border-[#3c3c3c]">
-      <h2>
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={onToggle}
-          className="flex w-full items-center gap-2 px-5 py-2.5 text-left text-sm font-semibold text-neutral-200 hover:bg-white/5"
-        >
-          <span aria-hidden="true" className="w-3 text-neutral-500">
-            {open ? "▾" : "▸"}
-          </span>
-          {title}
-        </button>
-      </h2>
-      {open && <div className="px-5 pb-5">{children}</div>}
-    </section>
   );
 }
 

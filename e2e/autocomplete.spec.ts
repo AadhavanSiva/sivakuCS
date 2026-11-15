@@ -1,6 +1,7 @@
 // Milestone 3, part 2: autocomplete in the editor. Typing a dot shows the
 // reference sheet's methods and the question's own classes' members.
 import { expect, test, type Page } from "@playwright/test";
+import { openExam } from "./helpers";
 
 const EXAM = "/exams/cs180/samples";
 
@@ -49,7 +50,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("a dot after a class name offers the reference sheet's methods, inserted as a call", async ({ page }) => {
-  await page.goto(`${EXAM}#1`);
+  await openExam(page, `${EXAM}#1`);
   await editAt(page, "void main() {\n    int age = Integer\n}\n", "Integer");
   await page.keyboard.type(".");
   expect(await suggestionLabels(page)).toEqual(["parseInt"]);
@@ -63,7 +64,7 @@ test("a dot after a class name offers the reference sheet's methods, inserted as
 });
 
 test("a dot after a String variable offers String's methods", async ({ page }) => {
-  await page.goto(`${EXAM}#1`);
+  await openExam(page, `${EXAM}#1`);
   await editAt(page, 'void main() {\n    String answer = IO.readln();\n    if (answer\n}\n', "if (answer");
   await page.keyboard.type(".");
   const labels = await suggestionLabels(page);
@@ -75,14 +76,14 @@ test("a dot after a String variable offers String's methods", async ({ page }) =
 });
 
 test("IO offers println, print and readln", async ({ page }) => {
-  await page.goto(`${EXAM}#4`);
+  await openExam(page, `${EXAM}#4`);
   await editAt(page, "void main() {\n    IO\n}\n", "IO");
   await page.keyboard.type(".");
   expect(new Set(await suggestionLabels(page))).toEqual(new Set(["print", "println", "readln"]));
 });
 
 test("the question's given classes offer their members", async ({ page }) => {
-  await page.goto(`${EXAM}#3`);
+  await openExam(page, `${EXAM}#3`);
   await editAt(
     page,
     "public class Playlist {\n    public static int totalSeconds(Track[] tracks) {\n        int first = tracks[0]\n        return 0;\n    }\n}\n",

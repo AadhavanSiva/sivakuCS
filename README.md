@@ -3,10 +3,10 @@
 Practice exams for Purdue CS 18000 (Java) that look, run and score like the
 real ones on Ed. Java compiles and runs entirely in the student's browser.
 
-**Status:** Milestones 1 and 2 of 5 are done, and Milestone 3 (the exam
-workspace) is in progress: its layout, terminal console, test feedback,
-instructions slide and autocomplete work at `/exams`. The timer and the
-results page come next, then accounts and the two practice exams.
+**Status:** Milestones 1 to 3 of 5 are done: Java 25 runs in the browser,
+questions are graded by the same code in the browser and in `npm run
+verify`, and a full exam can be sat at `/exams`, timed or not, with results
+after Submit. Accounts and the two practice exams come next.
 
 Unofficial practice. Not affiliated with Purdue University or Ed.
 
@@ -222,9 +222,34 @@ laptop):
   seconds it starts again by itself, allowing 120 seconds this time, and
   after a second stall it offers a Retry button.
 
-The code, the checkpoints and the current slide are kept in the browser's
-local storage (`lib/attempt-storage.ts`), so a refresh resumes where the
-student was; Milestone 4 adds saving to an account.
+### Timer, Submit and results
+
+- **The timer question.** Opening an exam with no attempt in progress asks
+  "Do you want a 60-minute timer?" (the length comes from `exam.json`), and
+  answering starts the attempt.
+- **Timed.** A countdown runs in the top bar towards a stored deadline, so
+  a refresh, or closing the tab, does not stop or restart it. At zero the
+  files lock and the exam is submitted automatically, even if the time ran
+  out while the page was closed.
+- **Untimed.** No clock and no lock.
+- **Submit** asks for confirmation, since it ends the attempt, then grades
+  every question's code as it stands with the same grader as Test. A
+  submission interrupted by a refresh carries on.
+- **Results** (`/exams/<course>/<exam>/results`): the total out of the
+  exam's points, then each question's points, opening to its test cases
+  laid out like the Feedback panel.
+- **Afterwards,** the exam reopens with the submitted code, read-only (Run,
+  Test and Submit are off); "Start a new attempt" clears it and starts over.
+
+The attempt (timer, code, checkpoints, current slide, submission) is kept
+in the browser's local storage (`lib/attempt-storage.ts`), so a refresh
+resumes where the student was; Milestone 4 adds saving to an account.
+
+The editor is a small Monaco component of our own
+(`components/workspace/JavaEditor.tsx`) rather than `@monaco-editor/react`'s:
+Next.js keeps a visited page alive in the background, and that wrapper's
+editor failed ("InstantiationService has been disposed") when a student left
+the exam page and came back. A browser test covers leaving and returning.
 
 ## Owner decisions
 
