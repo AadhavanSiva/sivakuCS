@@ -3,12 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { StartingJava } from "@/components/StartingJava";
 import { Testcases } from "@/components/Testcases";
+import type { ApiMember } from "@/lib/autocomplete/reference-api";
 import type { Checkpoint } from "@/lib/attempt-storage";
 import { filesToCompile, gradeQuestion } from "@/lib/grading/grade";
 import type { Question } from "@/lib/grading/types";
 import { getJava, preloadJava, useJavaRuntime } from "@/lib/java-runtime";
 import type { JavaFiles } from "@/lib/java/programs";
 import { JavaEditor } from "./JavaEditor";
+import { setCompletionContext } from "./completions";
 import { RunConsole, type RunConsoleHandle } from "./RunConsole";
 
 export type SaveStatus = "saved" | "saving" | "failed";
@@ -17,6 +19,8 @@ type Props = {
   question: Question;
   number: number;
   referenceHtml: string;
+  /** The reference sheet's methods, for autocomplete. */
+  referenceApi: ApiMember[];
   /** The student's editable files; missing ones are taken from the starter. */
   studentFiles: JavaFiles;
   checkpoint: Checkpoint | undefined;
@@ -32,7 +36,7 @@ type Props = {
  * bar, and the console with Run and Test.
  */
 export function QuestionSlide(props: Props) {
-  const { question, number, referenceHtml, studentFiles, checkpoint, saveStatus, onEdit, onSaveNow, onTested } = props;
+  const { question, number, referenceHtml, referenceApi, studentFiles, checkpoint, saveStatus, onEdit, onSaveNow, onTested } = props;
   const { meta } = question;
   const tabs = [...meta.editable, ...meta.readOnly];
   const [activeTab, setActiveTab] = useState(tabs[0]);
@@ -57,6 +61,11 @@ export function QuestionSlide(props: Props) {
   // Data files (laps.txt...) the program can open when it is Run.
   const dataFiles = Object.fromEntries(Object.entries(compileSet).filter(([name]) => !name.endsWith(".java")));
   const javaBroken = status === "failed";
+
+  // Autocomplete offers the reference sheet's methods and this question's classes.
+  useEffect(() => {
+    setCompletionContext(() => ({ api: referenceApi, files: compileSet }));
+  });
 
   async function test() {
     setFeedbackOpen(true);

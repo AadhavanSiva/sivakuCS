@@ -7,6 +7,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { marked } from "marked";
+import { parseReferenceSheet } from "../lib/autocomplete/reference-api";
 import { examDirs, loadExam } from "../lib/content/load";
 import type { Exam } from "../lib/content/types";
 
@@ -20,6 +21,7 @@ const exams: Exam[] = examDirs().map((dir) => {
   return {
     ...exam,
     referenceHtml: html(exam.reference),
+    referenceApi: parseReferenceSheet(exam.reference),
     instructionsHtml: html(exam.meta.instructions),
     questions: exam.questions.map((q) => ({ ...q, descriptionHtml: html(q.description) })),
   };

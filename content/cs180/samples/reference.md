@@ -1,3 +1,5 @@
+<!-- receivers: s=String, t=String, reader=BufferedReader, writer=PrintWriter -->
+
 ## Input and output
 
 | | |

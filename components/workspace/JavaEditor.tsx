@@ -1,6 +1,7 @@
 "use client";
 
 import Editor, { loader } from "@monaco-editor/react";
+import { registerJavaCompletions } from "./completions";
 
 // The site serves its own copy of Monaco (scripts/copy-monaco.mjs) rather
 // than the CDN the wrapper uses by default.
@@ -28,6 +29,7 @@ export function JavaEditor({ path, initialText, readOnly, onChange, onSave }: Ja
       defaultLanguage={languageOf(path)}
       defaultValue={initialText}
       keepCurrentModel
+      beforeMount={registerJavaCompletions}
       onChange={(text) => onChange(text ?? "")}
       onMount={(editor, monaco) => {
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => onSave?.());

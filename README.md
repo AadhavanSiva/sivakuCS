@@ -4,9 +4,9 @@ Practice exams for Purdue CS 18000 (Java) that look, run and score like the
 real ones on Ed. Java compiles and runs entirely in the student's browser.
 
 **Status:** Milestones 1 and 2 of 5 are done, and Milestone 3 (the exam
-workspace) is in progress: its layout, Run console, Test panel and
-instructions slide work at `/exams`. Autocomplete, the timer and the results
-page come next, then accounts and the two practice exams.
+workspace) is in progress: its layout, terminal console, test feedback,
+instructions slide and autocomplete work at `/exams`. The timer and the
+results page come next, then accounts and the two practice exams.
 
 Unofficial practice. Not affiliated with Purdue University or Ed.
 
@@ -201,6 +201,14 @@ laptop):
 - **Right:** file tabs (read-only files locked), the editor (Monaco, served
   from the site itself) and a status bar (`/home/Main.java`, "All changes
   saved", `Spaces: 4 (Auto)`).
+- **Autocomplete:** typing a dot offers the members of what is before it:
+  `Integer.` the reference sheet's static methods, `s.` on a `String` its
+  instance methods, `song.` or `tracks[0].` the members of the question's
+  own and given classes (inherited ones included; private ones only inside
+  their class), and after `new`, the constructors. Types come from
+  declarations, string literals, `this`, chained calls whose return type is
+  known, and array indexing. Methods insert as calls with their parameters
+  ready to type over. See `lib/autocomplete/`.
 - **Below the editor:** the console, a terminal. **Run** compiles and runs
   `Main.java`; output and what the student types appear inline in one
   stream, and a line typed early waits until the program reads it (Ctrl+D
@@ -298,6 +306,18 @@ A failed check reads `total of the sample songs ==> expected: <345> but was: <0>
 The student sees that reason for sample tests only; hidden cases show only
 pass or fail. Code that does not compile scores 0 and shows the compiler's
 messages. Line endings never count.
+
+### Reference sheets
+
+`reference.md` is Markdown tables whose first column holds code and second
+column says what it does. Autocomplete reads the code spans: `Integer.parseInt(s)`
+is a static method of `Integer`, `new PrintWriter(name)` a constructor, and
+`s.trim()` an instance method of whatever `s` is. Say what each receiver is
+in a comment at the top (it is not shown); `s` and `t` default to `String`:
+
+```markdown
+<!-- receivers: s=String, t=String, reader=BufferedReader, writer=PrintWriter -->
+```
 
 Students write Java 25: a whole program can be a compact source file,
 `void main() { ... }` with no class, and console input and output use

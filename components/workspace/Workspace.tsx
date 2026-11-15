@@ -100,6 +100,7 @@ export function Workspace({ exam }: { exam: Exam }) {
             question={question}
             number={slide}
             referenceHtml={exam.referenceHtml ?? ""}
+            referenceApi={exam.referenceApi ?? []}
             studentFiles={attempt.files[question.id] ?? {}}
             checkpoint={attempt.checkpoints[question.id]}
             saveStatus={saveStatus}
