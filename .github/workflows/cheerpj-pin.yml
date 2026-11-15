@@ -1,0 +1,33 @@
+name: CheerpJ runtime unchanged
+
+# The site loads CheerpJ from its CDN, where the 5.0 path can be updated in
+# place. This fails (and GitHub emails the repo owner) if the runtime files
+# no longer match cheerpj-lock.json, so a CheerpJ update cannot change how
+# student code behaves without anyone noticing. See scripts/check-cheerpj.mjs.
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - cheerpj-lock.json
+      - public/cheerpj/sandbox-worker.js
+      - scripts/check-cheerpj.mjs
+      - .github/workflows/cheerpj-pin.yml
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+      - name: Compare the CDN runtime with cheerpj-lock.json
+        run: node scripts/check-cheerpj.mjs

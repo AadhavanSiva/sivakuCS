@@ -75,6 +75,7 @@ Then open a new terminal and follow step 5 above.
 | `npm run lint` | ESLint |
 | `npm run test:e2e` | Browser tests (Playwright, headless Chromium). Starts a dev server on port 3100 unless one is running there |
 | `npm run build:sandbox` | Rebuilds `public/cheerpj/sandbox.jar` from `java/sandbox` (needs JDK 25) |
+| `npm run check:cheerpj` | Fails if the CheerpJ runtime on its CDN no longer matches `cheerpj-lock.json` |
 
 ## How Java runs in the browser
 
@@ -95,6 +96,33 @@ labels a preview.
   stdin, timeLimitMs })` returns the compile errors, or the output, the exit
   code and every file in the working directory afterwards. The time limit
   counts only the program's own running time, not compiling.
+- **`lib/java-runtime.ts`** keeps one JVM per tab, shared by every page and
+  kept alive across client-side navigation. `preloadJava()` starts it early;
+  the exam instructions slide calls it, so Java is ready by the first
+  question. `<StartingJava />` (in `components/`) shows "Starting Java…"
+  while it loads, including the restart after Stop or a time-out.
+
+### Pinned CheerpJ version
+
+The free CheerpJ licence requires loading the runtime from CheerpJ's CDN,
+which serves only a major.minor path: `https://cjrtnc.leaningtech.com/5.0/`.
+No exact-build URL exists, and Leaning Technologies can update that path in
+place. Freezing an exact build means self-hosting the runtime, which needs a
+paid licence. So the version is pinned to 5.0, and any change within it is
+made loud rather than prevented:
+
+- `cheerpj-lock.json` records the SHA-256 of `loader.js`, `cj3.js` and
+  `cj3.wasm`, and the Java build the runtime reports.
+- `npm run check:cheerpj` compares the CDN with the lock. A GitHub Action
+  (`.github/workflows/cheerpj-pin.yml`) runs it daily, and GitHub emails the
+  owner if it fails.
+- The browser tests fail if the runtime's Java build differs from the lock,
+  and `/lab` shows a warning.
+
+When it fires: rerun the browser tests (and `npm run verify` once it
+exists). If everything passes, accept the new runtime with
+`node scripts/check-cheerpj.mjs --update` and update `javaRuntime` in the
+lock from the version `/lab` shows.
 
 The jar is committed because Vercel's build machines have no JDK. After
 changing anything under `java/sandbox`, run `npm run build:sandbox` and commit
@@ -151,6 +179,18 @@ handling and file paths.
 - **Relative paths:** CheerpJ resolves `java.io` relative paths against
   `/files/` regardless of `user.dir`, so the program's working directory is
   `/files/` and `user.dir` is set to match.
+
+## Owner decisions
+
+Choices that differ from the original build brief, made by the owner:
+
+- **Java 25, not 21.** The site uses CheerpJ's Java 25 runtime, with no
+  fallback to an older Java. Java 25 has `java.lang.IO` built in, so the
+  brief's `IO` shim is not needed.
+- **CheerpJ is pinned to 5.0** and changes within it are detected (above).
+- **Java starts loading on the exam instructions slide**, behind a
+  "Starting Java…" indicator, so students do not wait for it at the first
+  question.
 
 ## Adding questions
 

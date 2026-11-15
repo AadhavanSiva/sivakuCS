@@ -1,14 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import {
-  DEFAULT_TIME_LIMIT_MS,
-  JavaSandbox,
-  type RunOutcome,
-  type RuntimeInfo,
-  type SandboxStatus,
-  splitFiles,
-} from "@/lib/java-sandbox";
+import { useEffect, useState } from "react";
+import { StartingJava } from "@/components/StartingJava";
+import { DEFAULT_TIME_LIMIT_MS, type RunOutcome, splitFiles } from "@/lib/java-sandbox";
+import { getJava, preloadJava, useJavaRuntime, type JavaRuntimeState } from "@/lib/java-runtime";
 import {
   CHECK_INPUT_FILES,
   CHECK_PROGRAM,
@@ -19,7 +14,8 @@ import {
 // Milestone 1: prove Java 25 compiles and runs in the browser. Deliberately
 // bare; the exam workspace comes in Milestone 3.
 
-const STATUS_TEXT: Record<SandboxStatus, string> = {
+const STATUS_TEXT: Record<JavaRuntimeState["status"], string> = {
+  idle: "Starting Java…",
   starting: "Starting Java…",
   ready: "Ready",
   compiling: "Compiling…",
@@ -36,11 +32,7 @@ const OUTCOME_TEXT: Record<RunOutcome["kind"], string> = {
 };
 
 export default function LabPage() {
-  const sandbox = useRef<JavaSandbox | null>(null);
-  const [status, setStatus] = useState<SandboxStatus>("starting");
-  const [info, setInfo] = useState<RuntimeInfo | null>(null);
-  const [readyMs, setReadyMs] = useState<number | null>(null);
-  const [warmMs, setWarmMs] = useState<number | null>(null);
+  const { status, info, readyMs, warmMs, runtimeChanged } = useJavaRuntime();
 
   const [sources, setSources] = useState(CHECK_PROGRAM);
   const [stdin, setStdin] = useState(CHECK_STDIN);
@@ -49,26 +41,13 @@ export default function LabPage() {
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<RunOutcome | null>(null);
 
-  useEffect(() => {
-    const box = new JavaSandbox({
-      onStatus: setStatus,
-      onReady: (runtime, ms) => {
-        setInfo(runtime);
-        // Only the first start is the cold start; restarts after Stop are not.
-        setReadyMs((previous) => previous ?? ms);
-      },
-      onWarm: (ms) => setWarmMs((previous) => previous ?? ms),
-    });
-    sandbox.current = box;
-    box.start();
-    return () => box.dispose();
-  }, []);
+  // The JVM is shared by the whole tab and outlives this page.
+  useEffect(preloadJava, []);
 
   async function run() {
-    if (!sandbox.current) return;
     setBusy(true);
     setOutcome(null);
-    const result = await sandbox.current.run({
+    const result = await getJava().run({
       files: splitFiles(sources, "Main.java"),
       inputFiles: splitFiles(inputFiles, "input.txt"),
       stdin,
@@ -82,11 +61,20 @@ export default function LabPage() {
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 p-6 font-mono text-sm">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="text-lg font-semibold">Java in the browser (Milestone 1)</h1>
-        <p data-testid="status" data-status={status}>
-          {STATUS_TEXT[status]}
-          {info && ` · Java ${info.javaVersion.split("-")[0]}`}
-        </p>
+        <div className="flex items-center gap-3">
+          <StartingJava />
+          <p data-testid="status" data-status={status} data-java-version={info?.javaVersion ?? ""}>
+            {status !== "starting" && status !== "idle" && STATUS_TEXT[status]}
+            {info && ` · Java ${info.javaVersion.split("-")[0]}`}
+          </p>
+        </div>
       </header>
+      {runtimeChanged && (
+        <p data-testid="runtime-changed" className="rounded border border-amber-500/60 p-2 text-amber-600">
+          CheerpJ has changed on its CDN since this site was verified against it (Java {info?.javaVersion}).
+          Rerun the browser tests and update cheerpj-lock.json; see scripts/check-cheerpj.mjs.
+        </p>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
         <label className="flex flex-col gap-1">
@@ -146,7 +134,7 @@ export default function LabPage() {
               data-testid="stop"
               className="rounded bg-rose-600 px-4 py-1 text-white disabled:opacity-50"
               disabled={!busy}
-              onClick={() => sandbox.current?.stop()}
+              onClick={() => getJava().stop()}
             >
               Stop
             </button>

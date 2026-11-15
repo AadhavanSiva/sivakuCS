@@ -1,0 +1,11 @@
+{
+  "loader": "https://cjrtnc.leaningtech.com/5.0/loader.js",
+  "files": {
+    "loader.js": "280a353f2922aeba36c732e8dd9d4e9b9789f6a3ee83de754a057088597f1520",
+    "cj3.js": "e6e33d6af26f4a0f3264a57abadd553e8f90a665fd275b69b6b7965e440712ba",
+    "cj3.wasm": "66b9ea50cb5650760f557d1e569f76ec66e8cd7b73627d9a11bb95a52c956175"
+  },
+  "javaRuntime": "25.0.5.0.3-internal-adhoc.root.jdk25",
+  "lastModified": "Fri, 30 Oct 2026 09:40:58 GMT",
+  "verified": "2026-11-15"
+}

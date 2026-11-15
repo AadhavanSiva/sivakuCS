@@ -11,6 +11,7 @@ import {
   CHECK_EXPECTED_STDOUT,
   INFINITE_LOOP_PROGRAM,
 } from "../lib/milestone1-samples";
+import lock from "../cheerpj-lock.json";
 
 const JVM_START_TIMEOUT = 4 * 60_000;
 // Every measurement, as a list, so repeated runs (--repeat-each) all count.
@@ -30,6 +31,19 @@ async function waitForWarm(page: Page) {
 async function setSources(page: Page, text: string) {
   await page.getByTestId("sources").fill(text);
 }
+
+test("Starting Java shows while the runtime loads, and the runtime is the verified one", async ({ page }) => {
+  await page.goto("/lab");
+  await expect(page.getByTestId("starting-java")).toBeVisible();
+  await expect(page.getByTestId("starting-java")).toHaveText("Starting Java…");
+  await expect(page.getByTestId("status")).toHaveAttribute("data-status", "ready", { timeout: JVM_START_TIMEOUT });
+  await expect(page.getByTestId("starting-java")).toHaveCount(0);
+
+  // CheerpJ is loaded from its CDN, which can change under us; the runtime
+  // must be the build recorded in cheerpj-lock.json.
+  await expect(page.getByTestId("status")).toHaveAttribute("data-java-version", lock.javaRuntime);
+  await expect(page.getByTestId("runtime-changed")).toHaveCount(0);
+});
 
 test("the check program compiles and runs with stdin and files", async ({ page }) => {
   await openLab(page);

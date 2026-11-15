@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "build:sandbox": "node scripts/build-sandbox.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "check:cheerpj": "node scripts/check-cheerpj.mjs"
   },
   "dependencies": {
     "next": "16.4.6",
