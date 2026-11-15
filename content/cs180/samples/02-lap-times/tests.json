@@ -11,7 +11,8 @@
       "outputFiles": {
         "best.txt": "Laps: 4\nFastest: 61.20\nAverage: 63.05\n"
       },
-      "stdout": ""
+      "stdout": "",
+      "sample": true
     },
     {
       "name": "Case 1",

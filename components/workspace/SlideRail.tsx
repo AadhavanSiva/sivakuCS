@@ -18,9 +18,7 @@ export function SlideRail({ questions, checkpoints, slide, onSelect }: Props) {
   return (
     <nav aria-label="Slides" className="flex w-12 shrink-0 flex-col items-center gap-1.5 overflow-y-auto border-r border-[#3c3c3c] bg-[#252526] py-2">
       <RailButton active={slide === 0} label="Exam instructions" testid="rail-0" onClick={() => onSelect(0)}>
-        <span aria-hidden="true" className="font-serif italic">
-          i
-        </span>
+        <PageIcon />
       </RailButton>
       {questions.map((question, i) => {
         const checkpoint = checkpoints[question.id];
@@ -30,12 +28,12 @@ export function SlideRail({ questions, checkpoints, slide, onSelect }: Props) {
           <RailButton
             key={question.id}
             active={slide === i + 1}
-            label={`Question ${i + 1}: ${question.meta.title}${done ? ", all tests passed" : checkpoint ? ", tested" : ""}`}
+            label={`Q${i + 1}: ${question.meta.title}${done ? ", all tests passed" : checkpoint ? ", tested" : ""}`}
             testid={`rail-${i + 1}`}
             state={state}
             onClick={() => onSelect(i + 1)}
           >
-            {i + 1}
+            <CodeIcon />
             {done && (
               <span aria-hidden="true" className="absolute -right-1 -top-1 rounded-full bg-emerald-600 px-1 text-[9px] leading-4 text-white">
                 ✓
@@ -48,6 +46,26 @@ export function SlideRail({ questions, checkpoints, slide, onSelect }: Props) {
         );
       })}
     </nav>
+  );
+}
+
+/** A page: the exam instructions. */
+function PageIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 16 16" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.3">
+      <path d="M4 1.5h5.5L13 5v9.5H4z" strokeLinejoin="round" />
+      <path d="M9.5 1.5V5H13" strokeLinejoin="round" />
+      <path d="M6 8h5M6 10.5h5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** <>: a coding question. */
+function CodeIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 16 16" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M5.5 4 1.5 8l4 4M10.5 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 

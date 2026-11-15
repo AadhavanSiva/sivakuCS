@@ -64,6 +64,10 @@ test("Test shows the header, the sample's reason, and only pass or fail for hidd
   await page.getByRole("button", { name: "Playlist (harness)" }).click();
   await page.getByTestId("test").click();
   await expect(page.getByTestId("testcases-header")).toHaveText("TESTCASES   2 / 7 passed, 2 points", { timeout: 120_000 });
+  // Collapsed until opened; only the failed sample row can be.
+  await expect(page.getByTestId("sample-reason")).toHaveCount(0);
+  await expect(page.getByTestId("testcase-toggle")).toHaveCount(1);
+  await page.getByTestId("testcase-toggle").click();
   await expect(page.getByTestId("sample-reason")).toHaveText(
     "Failed: total of the sample songs ==> expected: <345> but was: <0>",
   );

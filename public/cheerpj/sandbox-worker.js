@@ -157,14 +157,19 @@ onmessage = (event) => {
   queue = queue
     .then(async () => {
       if (!METHODS.has(method)) throw new Error(`Unknown sandbox method: ${method}`);
-      if (method === "runInteractive") {
-        interactiveId = id;
-        typedAhead = [];
-        waitingForLine = null;
-      }
+      if (method === "runInteractive") interactiveId = id;
       postMessage({ id, type: "started" });
-      const value = await Sandbox[method](...args.map(String));
-      postMessage({ id, type: "result", value: value == null ? null : String(value) });
+      try {
+        const value = await Sandbox[method](...args.map(String));
+        postMessage({ id, type: "result", value: value == null ? null : String(value) });
+      } finally {
+        // Lines typed while the program compiled wait for it, as in a
+        // terminal; whatever it never read is dropped when it ends.
+        if (method === "runInteractive") {
+          typedAhead = [];
+          waitingForLine = null;
+        }
+      }
     })
     .catch((e) => postMessage({ id, type: "error", message: describe(e) }));
 };

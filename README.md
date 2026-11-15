@@ -190,18 +190,24 @@ handling and file paths.
 like a coding challenge on the real exam (dark theme, sized for a 1366x768
 laptop):
 
-- **Top bar:** back to the exams, Prev / Next, the slide's title, Submit.
-- **Rail:** the instructions, then one button per question, marked ● once
-  tested and ✓ once every test passed.
-- **Left:** the question, then the exam's reference sheet.
+- **Top bar:** back to the exams, Prev / Next, the slide's title
+  (`Q1: Ticket price`), Submit.
+- **Rail:** a page icon for the instructions, then a `<>` icon per
+  question, marked ● once tested and ✓ once every test passed.
+- **Left:** two collapsible sections. **Description** holds the question
+  and the exam's reference sheet. **Feedback** holds the test results under
+  `TESTCASES 3 / 14 passed, 2 points`: a row per test with its name, ✓ or
+  ✗, and points; a failed sample row opens to show why.
 - **Right:** file tabs (read-only files locked), the editor (Monaco, served
-  from the site itself) and a status bar ("All changes saved").
-- **Below the editor:** **Run** compiles and runs `Main.java` in an
-  interactive console: output appears as it is printed and the student
-  types input while it runs (Ctrl+D ends input). Data files the question
-  provides, like `laps.txt`, are in the working directory. A run may use 10
-  seconds of computing; time spent waiting for input does not count.
-  **Test** grades the question, shows the results, and saves a checkpoint.
+  from the site itself) and a status bar (`/home/Main.java`, "All changes
+  saved", `Spaces: 4 (Auto)`).
+- **Below the editor:** the console, a terminal. **Run** compiles and runs
+  `Main.java`; output and what the student types appear inline in one
+  stream, and a line typed early waits until the program reads it (Ctrl+D
+  ends input). Data files the question provides, like `laps.txt`, are in
+  the working directory. A run may use 10 seconds of computing; time spent
+  waiting for input does not count. **Test** grades the question, opens
+  Feedback, and saves a checkpoint.
 - **Instructions slide:** the exam's length, questions and points, how
   scoring works, and that Test saves a checkpoint. Java starts loading
   here, behind a "Starting Java…" indicator. If it is not ready within 60
@@ -236,7 +242,8 @@ content/<course>/<exam>/
     question.md      the description and the sample (no hints, no topic label)
     meta.json        {"title", "points", "editable": [...], "readOnly": [...],
                       "mainClass"?: "Main", "harnessClass"?: "Harness"}
-    starter/         what the student starts with: the editable files, with
+    starter/         what the student starts with: an empty Main.java for a
+                     whole-program question; otherwise the editable files with
                      signatures, doc comments and stub bodies (return 0;)
     given/           the read-only files, shown as locked tabs; often a small Main.java
     solution/        the reference solution's editable files
@@ -245,19 +252,33 @@ content/<course>/<exam>/
     harness/         harness questions only: the hidden test driver
 ```
 
-`tests.json` is `{"kind", "timeLimitMs"?: 5000, "cases": [...]}`. The first case
-is named `Sample from the handout` and is worth 0 points; the rest are named
-`Case 1`, `Case 2`, ... and are each worth at least 1 point (usually 1). The case
-points add up to the question's `points`, which is 5 to 13; an exam's
-questions add up to 100 unless `exam.json` says `"draft": true`.
+`tests.json` is `{"kind", "timeLimitMs"?: 5000, "cases": [...]}`. Each case
+has a free-form `name` and its own `points` (a whole number, 0 or more).
+`"sample": true` marks the tests from the handout: a failed sample says why,
+and every other case is hidden and shows only pass or fail. Sample tests may
+be worth points. Case points add up to the question's `points`, which is 5
+to 13; an exam's questions add up to 100 unless `exam.json` says
+`"draft": true`.
 
 The three kinds of test:
 
 | `kind` | Each case has | Passes when |
 |---|---|---|
-| `stdio` | `stdin`, `stdout` | running `Main` with that input prints exactly that output |
-| `files` | `inputFiles` (left out for none), `outputFiles` (`null` means "must not exist"), optionally `stdout` | the files after the run, and the output if given, are exactly as expected |
+| `stdio` | `stdin`, and `stdout` or `outputLine` | running `Main` with that input prints exactly that output, or that line |
+| `files` | `inputFiles` (left out for none), `outputFiles` (`null` means "must not exist"), optionally `stdout` or `outputLine` | the files after the run, and the output if given, are exactly as expected |
 | `harness` | `call`: a public static method of the harness class | the method returns rather than throwing |
+
+For Ed's Midterm 1 pattern, one test per output line, give each case an
+`outputLine` instead of `stdout`:
+
+```json
+{ "name": "Sample run from the handout: the Words line", "points": 1, "sample": true,
+  "stdin": "the quick brown fox\n", "outputLine": { "number": 2, "text": "Words: 4" } },
+{ "name": "Case 1.1", "points": 1, "stdin": "hello\n", "outputLine": { "number": 2, "text": "Words: 1" } }
+```
+
+Cases with the same input share one run of the program. A failed line reads
+`line 2 ==> expected: <Words: 4> but was: <Words: 3>`.
 
 A harness is Java in `harness/` that calls the student's code, including
 with classes the student has never seen. It checks results with
@@ -274,13 +295,18 @@ public class Harness {
 ```
 
 A failed check reads `total of the sample songs ==> expected: <345> but was: <0>`.
-The student sees that reason for the sample only; hidden cases show only pass
-or fail. Code that does not compile scores 0 and shows the compiler's
+The student sees that reason for sample tests only; hidden cases show only
+pass or fail. Code that does not compile scores 0 and shows the compiler's
 messages. Line endings never count.
+
+Students write Java 25: a whole program can be a compact source file,
+`void main() { ... }` with no class, and console input and output use
+`IO.readln` and `IO.println`, as on the course's reference sheets.
 
 Then run `npm run verify`. CI runs it on every push and fails if any
 reference solution misses a test or any broken solution passes every hidden
-case. `content/cs180/samples` has one worked example of each kind.
+case. `content/cs180/samples` has a worked example of each kind, including
+`04-word-count` for one test per output line.
 
 ### How grading works
 

@@ -26,17 +26,23 @@ type Props = {
   onTested: (checkpoint: Checkpoint) => void;
 };
 
-/** One question: the description and reference sheet, the files, and the Run / Test panel. */
+/**
+ * One question. Left: Description (the question and the reference sheet)
+ * and Feedback (the test results). Right: file tabs, the editor, a status
+ * bar, and the console with Run and Test.
+ */
 export function QuestionSlide(props: Props) {
   const { question, number, referenceHtml, studentFiles, checkpoint, saveStatus, onEdit, onSaveNow, onTested } = props;
   const { meta } = question;
   const tabs = [...meta.editable, ...meta.readOnly];
   const [activeTab, setActiveTab] = useState(tabs[0]);
-  const [panel, setPanel] = useState<"console" | "testcases">("console");
+  const [descriptionOpen, setDescriptionOpen] = useState(true);
+  const [feedbackOpen, setFeedbackOpen] = useState(true);
   const [running, setRunning] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testError, setTestError] = useState<string | null>(null);
   const runConsole = useRef<RunConsoleHandle>(null);
+  const feedback = useRef<HTMLElement>(null);
   const { status } = useJavaRuntime();
 
   // Reached directly (a refresh mid-attempt): Java may not have started yet.
@@ -53,9 +59,11 @@ export function QuestionSlide(props: Props) {
   const javaBroken = status === "failed";
 
   async function test() {
-    setPanel("testcases");
+    setFeedbackOpen(true);
     setTesting(true);
     setTestError(null);
+    // Bring the results into view; the description may be long.
+    requestAnimationFrame(() => feedback.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
     try {
       const files = Object.fromEntries(meta.editable.map((name) => [name, textOf(name)]));
       const result = await gradeQuestion(getJava(), question, files);
@@ -69,17 +77,36 @@ export function QuestionSlide(props: Props) {
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1">
-      <section
-        aria-label="Question"
-        className="w-[40%] min-w-[18rem] overflow-y-auto border-r border-[#3c3c3c] bg-[#1f1f1f] px-5 py-4"
-      >
-        <article data-testid="question-description" className="content-html" dangerouslySetInnerHTML={{ __html: question.descriptionHtml ?? "" }} />
-        <hr className="my-6 border-[#3c3c3c]" />
-        <details open className="group">
-          <summary className="cursor-pointer select-none text-sm font-semibold text-neutral-300">Reference sheet</summary>
-          <article data-testid="reference-sheet" className="content-html mt-3" dangerouslySetInnerHTML={{ __html: referenceHtml }} />
-        </details>
-      </section>
+      <div className="w-[40%] min-w-[18rem] overflow-y-auto border-r border-[#3c3c3c] bg-[#1f1f1f]">
+        <PaneSection title="Description" open={descriptionOpen} onToggle={() => setDescriptionOpen(!descriptionOpen)} testid="section-description">
+          <article
+            data-testid="question-description"
+            className="content-html"
+            dangerouslySetInnerHTML={{ __html: question.descriptionHtml ?? "" }}
+          />
+          <h2 className="mb-2 mt-6 border-t border-[#3c3c3c] pt-4 text-sm font-semibold text-neutral-300">Reference sheet</h2>
+          <article data-testid="reference-sheet" className="content-html" dangerouslySetInnerHTML={{ __html: referenceHtml }} />
+        </PaneSection>
+        <PaneSection
+          ref={feedback}
+          title="Feedback"
+          open={feedbackOpen}
+          onToggle={() => setFeedbackOpen(!feedbackOpen)}
+          testid="section-feedback"
+        >
+          {testing && <p className="text-sm text-neutral-400">Running the tests…</p>}
+          {!testing && testError && <p className="text-sm text-rose-400">{testError}</p>}
+          {!testing && !testError && checkpoint && (
+            <>
+              <Testcases result={checkpoint.result} />
+              <p className="mt-2 text-xs text-neutral-500">Checkpoint saved {new Date(checkpoint.at).toLocaleTimeString()}.</p>
+            </>
+          )}
+          {!testing && !testError && !checkpoint && (
+            <p className="text-sm text-neutral-500">Press Test to run the tests for question {number}. Results appear here.</p>
+          )}
+        </PaneSection>
+      </div>
 
       <section aria-label="Code" className="flex min-w-0 flex-1 flex-col bg-[#1e1e1e]">
         <div role="tablist" aria-label="Files" className="flex h-9 shrink-0 items-end overflow-x-auto border-b border-[#3c3c3c] bg-[#252526]">
@@ -124,51 +151,43 @@ export function QuestionSlide(props: Props) {
           )}
         </div>
 
-        <div className="flex h-6 shrink-0 items-center gap-3 border-t border-[#3c3c3c] bg-[#252526] px-3 text-[12px] text-neutral-400">
-          <span data-testid="file-path" className="font-mono">
-            {activeTab}
-            {!editable.has(activeTab) && " (read-only)"}
-          </span>
-          <span className="ml-auto" data-testid="save-status" data-status={saveStatus}>
+        <div className="flex h-6 shrink-0 items-center gap-4 border-t border-[#3c3c3c] bg-[#252526] px-3 font-mono text-[12px] text-neutral-400">
+          <span data-testid="file-path">/home/{activeTab}</span>
+          <span className="ml-auto font-sans" data-testid="save-status" data-status={saveStatus}>
             {saveStatus === "saved" && "All changes saved"}
             {saveStatus === "saving" && "Saving…"}
             {saveStatus === "failed" && "Not saved: this browser will not store it"}
           </span>
+          <span data-testid="indentation">Spaces: 4 (Auto)</span>
         </div>
 
-        <div className="flex h-[38%] min-h-[11rem] shrink-0 flex-col border-t border-[#3c3c3c] bg-[#181818]">
-          <div className="flex h-9 shrink-0 items-center gap-1 border-b border-[#3c3c3c] px-2">
-            <PanelTab active={panel === "console"} onClick={() => setPanel("console")} testid="panel-console">
+        <div className="flex h-[38%] min-h-[11rem] shrink-0 flex-col border-t border-[#3c3c3c]">
+          <div className="flex h-8 shrink-0 items-center gap-3 border-b border-[#3c3c3c] bg-[#252526] px-3 text-[13px]">
+            <span data-testid="panel-console" className="border-b-2 border-emerald-500 pb-0.5 text-neutral-100">
               Console
-            </PanelTab>
-            <PanelTab active={panel === "testcases"} onClick={() => setPanel("testcases")} testid="panel-testcases">
-              Testcases
-            </PanelTab>
-            <StartingJava className="ml-3 text-neutral-400" />
-            <div className="ml-auto flex items-center gap-2">
+            </span>
+            <StartingJava className="text-neutral-400" />
+            <div className="ml-auto flex items-center gap-4">
               {running ? (
-                <button type="button" data-testid="stop" className={BUTTON_STOP} onClick={() => runConsole.current?.stop()}>
+                <button type="button" data-testid="stop" className={TEXT_BUTTON} onClick={() => runConsole.current?.stop()}>
                   Stop
                 </button>
               ) : (
                 <button
                   type="button"
                   data-testid="run"
-                  className={BUTTON_SECONDARY}
+                  className={TEXT_BUTTON}
                   disabled={!canRun || testing || javaBroken}
                   title={canRun ? `Compile and run ${mainClass}.java` : `This question has no ${mainClass}.java to run`}
-                  onClick={() => {
-                    setPanel("console");
-                    runConsole.current?.run();
-                  }}
+                  onClick={() => runConsole.current?.run()}
                 >
-                  ▶ Run
+                  Run
                 </button>
               )}
               <button
                 type="button"
                 data-testid="test"
-                className={BUTTON_PRIMARY}
+                className={TEXT_BUTTON}
                 disabled={running || testing || javaBroken}
                 title="Run the tests and save a checkpoint"
                 onClick={test}
@@ -178,32 +197,7 @@ export function QuestionSlide(props: Props) {
             </div>
           </div>
           <div className="min-h-0 flex-1">
-            <div className={panel === "console" ? "h-full" : "hidden"}>
-              <RunConsole
-                ref={runConsole}
-                files={compileSet}
-                inputFiles={dataFiles}
-                mainClass={mainClass}
-                onRunningChange={setRunning}
-              />
-            </div>
-            <div className={panel === "testcases" ? "h-full overflow-y-auto px-3 py-2 text-neutral-200" : "hidden"}>
-              {testing && <p className="text-sm text-neutral-400">Running the tests…</p>}
-              {!testing && testError && <p className="text-sm text-rose-400">{testError}</p>}
-              {!testing && !testError && checkpoint && (
-                <>
-                  <Testcases result={checkpoint.result} />
-                  <p className="mt-2 text-xs text-neutral-500">
-                    Checkpoint saved {new Date(checkpoint.at).toLocaleTimeString()}.
-                  </p>
-                </>
-              )}
-              {!testing && !testError && !checkpoint && (
-                <p className="text-sm text-neutral-500">
-                  Press Test to run the sample from the handout and the hidden cases for question {number}.
-                </p>
-              )}
-            </div>
+            <RunConsole ref={runConsole} files={compileSet} inputFiles={dataFiles} mainClass={mainClass} onRunningChange={setRunning} />
           </div>
         </div>
       </section>
@@ -211,21 +205,35 @@ export function QuestionSlide(props: Props) {
   );
 }
 
-function PanelTab({ active, onClick, testid, children }: { active: boolean; onClick: () => void; testid: string; children: React.ReactNode }) {
+type PaneSectionProps = {
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  testid: string;
+  children: React.ReactNode;
+  ref?: React.Ref<HTMLElement>;
+};
+
+/** A collapsible section of the left pane. */
+function PaneSection({ title, open, onToggle, testid, children, ref }: PaneSectionProps) {
   return (
-    <button
-      type="button"
-      data-testid={testid}
-      aria-pressed={active}
-      onClick={onClick}
-      className={`rounded px-2.5 py-1 text-[13px] ${active ? "bg-[#2d2d2d] text-neutral-100" : "text-neutral-400 hover:text-neutral-200"}`}
-    >
-      {children}
-    </button>
+    <section ref={ref} data-testid={testid} className="border-b border-[#3c3c3c]">
+      <h2>
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={onToggle}
+          className="flex w-full items-center gap-2 px-5 py-2.5 text-left text-sm font-semibold text-neutral-200 hover:bg-white/5"
+        >
+          <span aria-hidden="true" className="w-3 text-neutral-500">
+            {open ? "▾" : "▸"}
+          </span>
+          {title}
+        </button>
+      </h2>
+      {open && <div className="px-5 pb-5">{children}</div>}
+    </section>
   );
 }
 
-const BUTTON_BASE = "rounded px-3 py-1 text-[13px] font-medium disabled:cursor-not-allowed disabled:opacity-40";
-const BUTTON_PRIMARY = `${BUTTON_BASE} bg-emerald-600 text-white hover:bg-emerald-500`;
-const BUTTON_SECONDARY = `${BUTTON_BASE} border border-[#4a4a4a] text-neutral-100 hover:bg-[#2d2d2d]`;
-const BUTTON_STOP = `${BUTTON_BASE} bg-rose-600 text-white hover:bg-rose-500`;
+const TEXT_BUTTON = "text-[13px] text-neutral-300 hover:text-white disabled:cursor-not-allowed disabled:text-neutral-600";

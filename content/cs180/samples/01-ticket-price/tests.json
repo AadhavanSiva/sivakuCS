@@ -6,7 +6,8 @@
       "name": "Sample from the handout",
       "points": 0,
       "stdin": "20\ny\n",
-      "stdout": "Enter your age:\nAre you a student? (y/n)\nTicket price: $8.75\n"
+      "stdout": "Enter your age:\nAre you a student? (y/n)\nTicket price: $8.75\n",
+      "sample": true
     },
     {
       "name": "Case 1",

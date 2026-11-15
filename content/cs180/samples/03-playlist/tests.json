@@ -5,7 +5,8 @@
     {
       "name": "Sample from the handout",
       "points": 0,
-      "call": "sampleFromTheHandout"
+      "call": "sampleFromTheHandout",
+      "sample": true
     },
     {
       "name": "Case 1",

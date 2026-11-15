@@ -18,14 +18,27 @@ export type QuestionMeta = {
   harnessClass?: string;
 };
 
-/** One entry in tests.json. The first is "Sample from the handout", worth 0. */
+/**
+ * One entry in tests.json. Names are free-form ("Sample run from the
+ * handout: the Count line", "Case 1.2"); any case may be worth points.
+ */
 export type TestCase = {
   name: string;
   points: number;
-  /** stdio and files: standard input. */
+  /**
+   * A test from the handout: if it fails, the student sees why. Every other
+   * case is hidden and shows only pass or fail.
+   */
+  sample?: boolean;
+  /** stdio and files: standard input. Cases with the same input share one run. */
   stdin?: string;
   /** stdio: the exact expected output. files: optional; checked only if given. */
   stdout?: string;
+  /**
+   * stdio and files: one line of the output instead of all of it, for one
+   * test per line (Ed's Midterm 1 pattern). number counts from 1.
+   */
+  outputLine?: { number: number; text: string };
   /** files: placed in the working directory before the run. Leave out for none. */
   inputFiles?: JavaFiles;
   /** files: expected contents after the run; null means the file must not exist. */
@@ -61,7 +74,7 @@ export type Question = {
 export type CaseResult = {
   name: string;
   points: number;
-  /** The first case, shown with its reason; hidden cases show only pass or fail. */
+  /** A sample case, shown with its reason; hidden cases show only pass or fail. */
   sample: boolean;
   passed: boolean;
   /** Why it failed, e.g. "describe a student ==> expected: <x> but was: <y>". */

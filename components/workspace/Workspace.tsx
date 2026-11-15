@@ -87,7 +87,7 @@ export function Workspace({ exam }: { exam: Exam }) {
 
   const { slide } = attempt;
   const question = slide > 0 ? exam.questions[slide - 1] : null;
-  const title = question ? `${slide}. ${question.meta.title}` : "Exam instructions";
+  const title = question ? `Q${slide}: ${question.meta.title}` : "Exam instructions";
 
   return (
     <div data-testid="workspace" data-theme="exam" className="flex min-h-0 flex-1 flex-col bg-[#1e1e1e] text-neutral-200">

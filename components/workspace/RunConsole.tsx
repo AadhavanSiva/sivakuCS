@@ -24,8 +24,9 @@ type Props = {
 };
 
 /**
- * The Run console: the program's output as it is written, and a line to
- * type its input into while it runs, like a terminal.
+ * The Run console, as a terminal: one stream in which the program's output
+ * and what the student types appear inline. While the program runs, the
+ * caret sits after its last output; Enter sends the line, Ctrl+D ends input.
  */
 export const RunConsole = forwardRef<RunConsoleHandle, Props>(function RunConsole(
   { files, inputFiles, mainClass, onRunningChange },
@@ -33,10 +34,9 @@ export const RunConsole = forwardRef<RunConsoleHandle, Props>(function RunConsol
 ) {
   const [chunks, setChunks] = useState<Chunk[]>([]);
   const [running, setRunning] = useState(false);
-  const [waiting, setWaiting] = useState(false);
   const [inputEnded, setInputEnded] = useState(false);
   const [line, setLine] = useState("");
-  const output = useRef<HTMLDivElement>(null);
+  const terminal = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   // For the unmount clean-up, which must not see a stale `running`.
   const runningRef = useRef(false);
@@ -52,38 +52,39 @@ export const RunConsole = forwardRef<RunConsoleHandle, Props>(function RunConsol
     });
 
   useEffect(() => {
-    output.current?.scrollTo({ top: output.current.scrollHeight });
-  }, [chunks]);
-
-  useEffect(() => {
-    if (waiting) input.current?.focus();
-  }, [waiting]);
+    terminal.current?.scrollTo({ top: terminal.current.scrollHeight });
+  }, [chunks, line]);
 
   async function run() {
-    if (running) return;
+    if (runningRef.current) return;
     setChunks([]);
-    setRunning(true);
     setInputEnded(false);
     setLine("");
     runningRef.current = true;
+    setRunning(true);
     onRunningChange(true);
     const outcome = await runInteractively(
       getJava(),
       { files, inputFiles, mainClass, timeLimitMs: RUN_TIME_LIMIT_MS },
-      { onOutput: (stream, text) => add({ kind: stream, text }), onWaitingForInput: setWaiting },
+      {
+        onOutput: (stream, text) => add({ kind: stream, text }),
+        onWaitingForInput: (waiting) => {
+          if (waiting) input.current?.focus({ preventScroll: true });
+        },
+      },
     );
     switch (outcome.kind) {
       case "compile-error":
         add({ kind: "problem", text: outcome.output });
         break;
       case "finished":
-        add({ kind: "note", text: `\nProgram finished${outcome.exitCode === 0 ? "" : ` with exit code ${outcome.exitCode}`}.` });
+        add({ kind: "note", text: outcome.exitCode === 0 ? "\n[Program finished]" : `\n[Program finished with exit code ${outcome.exitCode}]` });
         break;
       case "timeout":
-        add({ kind: "problem", text: `\nStopped: the program ran for more than ${outcome.timeLimitMs / 1000} seconds.` });
+        add({ kind: "problem", text: `\n[Stopped: the program ran for more than ${outcome.timeLimitMs / 1000} seconds]` });
         break;
       case "stopped":
-        add({ kind: "note", text: "\nStopped." });
+        add({ kind: "note", text: "\n[Stopped]" });
         break;
       case "error":
         add({ kind: "problem", text: `\n${outcome.message}` });
@@ -91,12 +92,12 @@ export const RunConsole = forwardRef<RunConsoleHandle, Props>(function RunConsol
     }
     runningRef.current = false;
     setRunning(false);
-    setWaiting(false);
+    setLine("");
     onRunningChange(false);
   }
 
   function stop() {
-    if (running) getJava().stop();
+    if (runningRef.current) getJava().stop();
   }
 
   useImperativeHandle(ref, () => ({ run, stop }));
@@ -122,65 +123,55 @@ export const RunConsole = forwardRef<RunConsoleHandle, Props>(function RunConsol
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div
-        ref={output}
-        data-testid="console-output"
-        className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[13px] leading-5"
-      >
-        {chunks.length === 0 && !running && (
-          <span className="text-neutral-500">Press Run to compile and run {mainClass}.java.</span>
-        )}
-        {chunks.length === 0 && running && <span className="text-neutral-500">Compiling…</span>}
-        {chunks.map((chunk, i) => (
-          <span key={i} data-kind={chunk.kind} className={CHUNK_STYLE[chunk.kind]}>
-            {chunk.text}
-          </span>
-        ))}
-      </div>
-      {running && (
-        <div className="flex items-center gap-2 border-t border-[#3c3c3c] px-3 py-1.5">
-          <span aria-hidden="true" className="font-mono text-emerald-400">
-            &gt;
-          </span>
-          <input
-            ref={input}
-            data-testid="console-input"
-            aria-label="Input to the program"
-            className="min-w-0 flex-1 bg-transparent font-mono text-[13px] outline-none placeholder:text-neutral-600"
-            placeholder={inputEnded ? "Input ended" : waiting ? "Type input and press Enter" : "Typing ahead is fine"}
-            disabled={inputEnded}
-            value={line}
-            onChange={(e) => setLine(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                send();
-              } else if (e.key === "d" && e.ctrlKey) {
-                e.preventDefault();
-                endInput();
-              }
-            }}
-          />
-          <button
-            type="button"
-            className="text-xs text-neutral-400 hover:text-neutral-200 disabled:opacity-40"
-            disabled={inputEnded}
-            onClick={endInput}
-            title="Ctrl+D"
-          >
-            End input
-          </button>
-        </div>
+    <div
+      ref={terminal}
+      data-testid="console-output"
+      onClick={() => {
+        // Clicking anywhere types into the program, unless text is being selected.
+        if (!window.getSelection()?.toString()) input.current?.focus({ preventScroll: true });
+      }}
+      className="h-full min-h-0 cursor-text overflow-y-auto whitespace-pre-wrap break-words bg-[#141414] px-3 py-2 font-mono text-[13px] leading-5 text-neutral-200"
+    >
+      {chunks.length === 0 && !running && (
+        <span className="text-neutral-500">Press Run to compile and run {mainClass}.java.</span>
+      )}
+      {chunks.length === 0 && running && <span className="text-neutral-500">Compiling…</span>}
+      {chunks.map((chunk, i) => (
+        <span key={i} data-kind={chunk.kind} className={CHUNK_STYLE[chunk.kind]}>
+          {chunk.text}
+        </span>
+      ))}
+      {running && !inputEnded && (
+        <input
+          ref={input}
+          data-testid="console-input"
+          aria-label="Input to the program (Enter sends the line, Ctrl+D ends input)"
+          autoComplete="off"
+          spellCheck={false}
+          className="m-0 inline-block border-0 bg-transparent p-0 font-mono text-[13px] leading-5 text-neutral-200 caret-emerald-400 outline-none"
+          style={{ width: `${line.length + 1}ch` }}
+          value={line}
+          onChange={(e) => setLine(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              send();
+            } else if (e.key === "d" && e.ctrlKey) {
+              e.preventDefault();
+              endInput();
+            }
+          }}
+        />
       )}
     </div>
   );
 });
 
 const CHUNK_STYLE: Record<Chunk["kind"], string> = {
-  out: "text-neutral-200",
+  out: "",
   err: "text-rose-400",
-  in: "text-emerald-400",
+  // Typed input looks like the program's own text, as in a terminal.
+  in: "",
   note: "text-neutral-500",
   problem: "text-rose-400",
 };

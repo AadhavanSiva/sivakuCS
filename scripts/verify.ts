@@ -21,7 +21,6 @@ import { gradeQuestion } from "../lib/grading/grade";
 import type { GradeResult, Question } from "../lib/grading/types";
 import { LocalJava, localJavaMajor } from "./lib/local-java";
 
-const SAMPLE_NAME = "Sample from the handout";
 const filter = process.argv[2]?.replace(/\\/g, "/");
 
 type Problems = string[];
@@ -63,18 +62,24 @@ function checkQuestion(dir: string, question: Question, problems: Problems) {
 
   if (!["stdio", "files", "harness"].includes(tests.kind)) problems.push(`tests.json: unknown kind "${tests.kind}"`);
   const cases = tests.cases ?? [];
-  if (cases.length < 2) problems.push("tests.json: needs the sample and at least one hidden case");
-  if (cases[0] && (cases[0].name !== SAMPLE_NAME || cases[0].points !== 0)) {
-    problems.push(`tests.json: the first case must be "${SAMPLE_NAME}" worth 0 points`);
-  }
-  cases.slice(1).forEach((c, i) => {
-    if (c.name !== `Case ${i + 1}`) problems.push(`tests.json: case ${i + 2} is named "${c.name}"; expected "Case ${i + 1}"`);
-    if (!Number.isInteger(c.points) || c.points < 1) problems.push(`tests.json: ${c.name} must be worth a whole number of points, at least 1`);
-  });
-  cases.forEach((c) => {
-    if (tests.kind === "stdio" && c.stdout === undefined) problems.push(`tests.json: ${c.name} has no expected stdout`);
-    if (tests.kind === "files" && !c.outputFiles && c.stdout === undefined) {
-      problems.push(`tests.json: ${c.name} checks neither files nor stdout`);
+  // Names are free-form ("Sample run from the handout: the Count line",
+  // "Case 1.2"); "sample": true marks the cases whose failures say why.
+  if (!cases.some((c) => c.sample)) problems.push('tests.json: needs at least one case with "sample": true');
+  if (!cases.some((c) => !c.sample)) problems.push("tests.json: needs at least one hidden case");
+  const names = new Set<string>();
+  cases.forEach((c, i) => {
+    if (typeof c.name !== "string" || !c.name.trim()) problems.push(`tests.json: case ${i + 1} has no name`);
+    else if (names.has(c.name)) problems.push(`tests.json: two cases are named "${c.name}"`);
+    names.add(c.name);
+    if (!Number.isInteger(c.points) || c.points < 0) problems.push(`tests.json: ${c.name} must be worth a whole number of points`);
+    const line = c.outputLine;
+    if (line && (!Number.isInteger(line.number) || line.number < 1 || typeof line.text !== "string")) {
+      problems.push(`tests.json: ${c.name} has an outputLine without a line number from 1 and its text`);
+    }
+    const checksOutput = c.stdout !== undefined || line !== undefined;
+    if (tests.kind === "stdio" && !checksOutput) problems.push(`tests.json: ${c.name} checks neither stdout nor an outputLine`);
+    if (tests.kind === "files" && !c.outputFiles && !checksOutput) {
+      problems.push(`tests.json: ${c.name} checks neither files nor output`);
     }
     if (tests.kind === "harness" && !c.call) problems.push(`tests.json: ${c.name} has no "call"`);
   });
