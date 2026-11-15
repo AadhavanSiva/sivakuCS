@@ -3,9 +3,11 @@
 Practice exams for Purdue CS 18000 (Java) that look, run and score like the
 real ones on Ed. Java compiles and runs entirely in the student's browser.
 
-**Status:** Milestone 1 of 5 is done: Java 25 compiles and runs in the
-browser. Try it at `/lab`. Questions, the exam workspace, accounts and the two
-practice exams come next.
+**Status:** Milestones 1 and 2 of 5 are done: Java 25 compiles and runs in
+the browser (`/lab`), and questions are plain folders graded by the same code
+in the browser and in `npm run verify` (try it at `/lab/grade` in
+development). The exam workspace, accounts and the two practice exams come
+next.
 
 Unofficial practice. Not affiliated with Purdue University or Ed.
 
@@ -73,7 +75,9 @@ Then open a new terminal and follow step 5 above.
 | `npm run dev` | Development server on port 3000 |
 | `npm run build` | Production build |
 | `npm run lint` | ESLint |
-| `npm run test:e2e` | Browser tests (Playwright, headless Chromium). Starts a dev server on port 3100 unless one is running there |
+| `npm run content` | Bundles `content/` into `generated/content.json` for the site, without solutions. Runs by itself before `dev` and `build` |
+| `npm run verify` | Checks every question: its structure, that the reference solution passes every test, and that each broken solution fails a hidden one. Needs JDK 25 |
+| `npm run test:e2e` | Browser tests (Playwright, headless Chromium). Starts a dev server on port 3100 unless one is running there. The grading tests also need JDK 25 |
 | `npm run build:sandbox` | Rebuilds `public/cheerpj/sandbox.jar` from `java/sandbox` (needs JDK 25) |
 | `npm run check:cheerpj` | Fails if the CheerpJ runtime on its CDN no longer matches `cheerpj-lock.json` |
 
@@ -194,4 +198,81 @@ Choices that differ from the original build brief, made by the owner:
 
 ## Adding questions
 
-Comes with Milestone 2.
+A question is a folder; a new exam or course is a new folder, not new code.
+
+```
+content/<course>/<exam>/
+  exam.json          {"title", "minutes": 60, "instructions": "markdown", "draft"?: true}
+  reference.md       the reference sheet shown under every question in the exam
+  <nn-slug>/         one question, e.g. 03-playlist; folders sort into exam order
+    question.md      the description and the sample (no hints, no topic label)
+    meta.json        {"title", "points", "editable": [...], "readOnly": [...],
+                      "mainClass"?: "Main", "harnessClass"?: "Harness"}
+    starter/         what the student starts with: the editable files, with
+                     signatures, doc comments and stub bodies (return 0;)
+    given/           the read-only files, shown as locked tabs; often a small Main.java
+    solution/        the reference solution's editable files
+    broken/          a deliberately wrong solution; or several, one per subfolder
+    tests.json       the test cases
+    harness/         harness questions only: the hidden test driver
+```
+
+`tests.json` is `{"kind", "timeLimitMs"?: 5000, "cases": [...]}`. The first case
+is named `Sample from the handout` and is worth 0 points; the rest are named
+`Case 1`, `Case 2`, ... and are each worth at least 1 point (usually 1). The case
+points add up to the question's `points`, which is 5 to 13; an exam's
+questions add up to 100 unless `exam.json` says `"draft": true`.
+
+The three kinds of test:
+
+| `kind` | Each case has | Passes when |
+|---|---|---|
+| `stdio` | `stdin`, `stdout` | running `Main` with that input prints exactly that output |
+| `files` | `inputFiles` (left out for none), `outputFiles` (`null` means "must not exist"), optionally `stdout` | the files after the run, and the output if given, are exactly as expected |
+| `harness` | `call`: a public static method of the harness class | the method returns rather than throwing |
+
+A harness is Java in `harness/` that calls the student's code, including
+with classes the student has never seen. It checks results with
+`sivaku.harness.Check`:
+
+```java
+import sivaku.harness.Check;
+
+public class Harness {
+    public static void sampleFromTheHandout() {
+        Check.equal("total of the sample songs", 345, Playlist.totalSeconds(sample()));
+    }
+}
+```
+
+A failed check reads `total of the sample songs ==> expected: <345> but was: <0>`.
+The student sees that reason for the sample only; hidden cases show only pass
+or fail. Code that does not compile scores 0 and shows the compiler's
+messages. Line endings never count.
+
+Then run `npm run verify`. CI runs it on every push and fails if any
+reference solution misses a test or any broken solution passes every hidden
+case. `content/cs180/samples` has one worked example of each kind.
+
+### How grading works
+
+`lib/grading/grade.ts` grades by calling the sandbox helper's methods through
+`lib/java/backend.ts`: in the browser through CheerpJ (`BrowserJava`), and in
+`npm run verify` through a local `java` process running the same jar
+(`scripts/lib/local-java.ts`). The browser tests grade every sample question's
+starter, solution and broken variants both ways and require identical
+results.
+
+Each case has its own time limit; a case that runs past it fails, and the JVM
+is restarted for the next one. The hidden harness is compiled against the
+student's compiled classes, so a renamed method or a changed signature fails
+the tests rather than the build.
+
+The site never reads `content/` itself: `npm run content` bundles what
+students may see into `generated/content.json`, which pages import. Solutions
+and broken variants are left out, so they are not in the deployed site at
+all, not even on the server.
+
+Grading happens in the student's browser, so the hidden cases and harness
+are sent to it, and a determined student could read them. That is acceptable
+for practice.

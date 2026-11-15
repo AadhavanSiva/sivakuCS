@@ -1,0 +1,48 @@
+{
+  "kind": "stdio",
+  "timeLimitMs": 5000,
+  "cases": [
+    {
+      "name": "Sample from the handout",
+      "points": 0,
+      "stdin": "20\ny\n",
+      "stdout": "Enter your age:\nAre you a student? (y/n)\nTicket price: $8.75\n"
+    },
+    {
+      "name": "Case 1",
+      "points": 1,
+      "stdin": "8\nn\n",
+      "stdout": "Enter your age:\nAre you a student? (y/n)\nTicket price: $6.50\n"
+    },
+    {
+      "name": "Case 2",
+      "points": 1,
+      "stdin": "65\nn\n",
+      "stdout": "Enter your age:\nAre you a student? (y/n)\nTicket price: $7.25\n"
+    },
+    {
+      "name": "Case 3",
+      "points": 1,
+      "stdin": "30\nn\n",
+      "stdout": "Enter your age:\nAre you a student? (y/n)\nTicket price: $11.00\n"
+    },
+    {
+      "name": "Case 4",
+      "points": 1,
+      "stdin": "12\ny\n",
+      "stdout": "Enter your age:\nAre you a student? (y/n)\nTicket price: $8.75\n"
+    },
+    {
+      "name": "Case 5",
+      "points": 1,
+      "stdin": "64\nY\n",
+      "stdout": "Enter your age:\nAre you a student? (y/n)\nTicket price: $8.75\n"
+    },
+    {
+      "name": "Case 6",
+      "points": 1,
+      "stdin": "70\ny\n",
+      "stdout": "Enter your age:\nAre you a student? (y/n)\nTicket price: $7.25\n"
+    }
+  ]
+}

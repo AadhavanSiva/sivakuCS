@@ -3,13 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "npm run content",
     "dev": "next dev",
+    "prebuild": "npm run content",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "build:sandbox": "node scripts/build-sandbox.mjs",
     "test:e2e": "playwright test",
-    "check:cheerpj": "node scripts/check-cheerpj.mjs"
+    "check:cheerpj": "node scripts/check-cheerpj.mjs",
+    "verify": "tsx scripts/verify.ts",
+    "content": "tsx scripts/build-content.ts"
   },
   "dependencies": {
     "next": "16.4.6",
@@ -25,6 +29,10 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "tailwindcss": "4.3.3",
+    "tsx": "^4.23.15",
     "typescript": "^5"
+  },
+  "allowScripts": {
+    "esbuild": false
   }
 }

@@ -1,0 +1,6 @@
+{
+  "title": "Sample questions",
+  "minutes": 60,
+  "draft": true,
+  "instructions": "Three sample questions, one for each kind of test: a whole program checked on its output, a program that reads and writes files, and methods called by hidden tests.\n\nPress **Test** to run the sample from the handout and the hidden cases. The sample shows why it failed; hidden cases show only whether they passed."
+}

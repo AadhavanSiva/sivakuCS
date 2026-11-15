@@ -2,6 +2,7 @@ package sivaku.sandbox;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -160,6 +161,18 @@ public final class Sandbox {
      *     "Main.java:3: error: ..." as it does on a student's own machine.
      */
     public static String compile(String srcDir, String outDir) throws IOException {
+        return compileWith(srcDir, outDir, "");
+    }
+
+    /**
+     * Like {@link #compile}, with a classpath for code the sources use but
+     * that is not among them: the student's compiled classes and the
+     * {@code sivaku.harness} helpers, when compiling a hidden test harness.
+     * Entries are separated by {@link File#pathSeparator}. (A separate name
+     * rather than an overload: CheerpJ's library mode resolves overloads
+     * unreliably.)
+     */
+    public static String compileWith(String srcDir, String outDir, String classPath) throws IOException {
         long start = System.nanoTime();
         JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
         if (javac == null) {
@@ -168,6 +181,10 @@ public final class Sandbox {
         Path src = Path.of(srcDir);
         List<String> args = new ArrayList<>(List.of(
                 "-d", outDir, "-encoding", "UTF-8", "-proc:none", "-g"));
+        if (!classPath.isEmpty()) {
+            args.add("-classpath");
+            args.add(classPath);
+        }
         try (Stream<Path> walk = Files.walk(src)) {
             walk.filter(p -> p.toString().endsWith(".java")).sorted()
                     .forEach(p -> args.add(p.toString()));
@@ -258,27 +275,23 @@ public final class Sandbox {
     }
 
     /**
-     * Runs mainClass from classDir with the given standard input.
+     * Runs mainClass with the given standard input.
      *
      * <p>Follows the Java 25 launch protocol: a static main(String[]) or
      * main(), or else an instance main on a new object of the class. A fresh
      * class loader per run means static fields start over each time.
      *
+     * @param classPath directories of compiled classes, separated by
+     *     {@link File#pathSeparator}
      * @return JSON {"exitCode", "stdout", "stderr", "stdoutTruncated",
      *     "stderrTruncated", "ms"}.
      */
-    public static String run(String classDir, String mainClass, String stdin) throws IOException {
+    public static String run(String classPath, String mainClass, String stdin) throws IOException {
         Capture out = new Capture();
         Capture err = new Capture();
-        STDIN.use(new ByteArrayInputStream(stdin.getBytes(StandardCharsets.UTF_8)));
-        STDOUT.use(out);
-        STDERR.use(err);
-
         int exitCode = 0;
         long start = System.nanoTime();
-        URL classes = Path.of(classDir).toUri().toURL();
-        try (URLClassLoader loader = new URLClassLoader(new URL[] {classes}, Sandbox.class.getClassLoader())) {
-            Thread.currentThread().setContextClassLoader(loader);
+        try (URLClassLoader loader = open(classPath, stdin, out, err)) {
             launch(loader.loadClass(mainClass));
         } catch (InvocationTargetException e) {
             if (e.getCause() instanceof ExitSignal exit) {
@@ -298,12 +311,7 @@ public final class Sandbox {
             exitCode = 1;
             reportUncaught(e);
         } finally {
-            System.out.flush();
-            System.err.flush();
-            Thread.currentThread().setContextClassLoader(Sandbox.class.getClassLoader());
-            STDIN.use(InputStream.nullInputStream());
-            STDOUT.use(OutputStream.nullOutputStream());
-            STDERR.use(OutputStream.nullOutputStream());
+            close();
         }
         long ms = (System.nanoTime() - start) / 1_000_000;
         return "{\"exitCode\":" + exitCode
@@ -312,6 +320,85 @@ public final class Sandbox {
                 + ",\"stdoutTruncated\":" + out.truncated
                 + ",\"stderrTruncated\":" + err.truncated
                 + ",\"ms\":" + ms + "}";
+    }
+
+    /**
+     * Runs one case of a hidden test harness: the public static no-argument
+     * method {@code method} of {@code harnessClass}. The case passes if it
+     * returns, and fails if it throws; a {@code sivaku.harness.Check} failure
+     * gives the reason shown to the student, such as
+     * "describe a student ==> expected: <x> but was: <y>".
+     *
+     * @return JSON {"passed", "reason", "stdout", "stderr", "ms"}; reason is
+     *     null when the case passed.
+     */
+    public static String callHarness(String classPath, String harnessClass, String method) throws IOException {
+        Capture out = new Capture();
+        Capture err = new Capture();
+        String reason = null;
+        long start = System.nanoTime();
+        try (URLClassLoader loader = open(classPath, "", out, err)) {
+            Method test = loader.loadClass(harnessClass).getMethod(method);
+            if (!Modifier.isStatic(test.getModifiers())) {
+                throw new NoSuchMethodException(harnessClass + "." + method + " is not static");
+            }
+            test.invoke(null);
+        } catch (InvocationTargetException e) {
+            reason = describeFailure(e.getCause());
+        } catch (ReflectiveOperationException | LinkageError e) {
+            // The harness itself is broken, or could not link against the
+            // student's classes (a method the student renamed, say).
+            reason = describeFailure(e);
+        } finally {
+            close();
+        }
+        long ms = (System.nanoTime() - start) / 1_000_000;
+        return "{\"passed\":" + (reason == null)
+                + ",\"reason\":" + json(reason)
+                + ",\"stdout\":" + json(out.text())
+                + ",\"stderr\":" + json(err.text())
+                + ",\"ms\":" + ms + "}";
+    }
+
+    /** What a student sees when a harness case fails, in the style of JUnit's messages. */
+    private static String describeFailure(Throwable t) {
+        if (t instanceof ExitSignal exit) {
+            return "Your code called System.exit(" + exit.status + ")";
+        }
+        if (t instanceof AssertionError && t.getMessage() != null) {
+            return t.getMessage();
+        }
+        if (t instanceof NoSuchMethodError || t instanceof NoSuchFieldError || t instanceof NoClassDefFoundError) {
+            return "Could not use your code: " + t;
+        }
+        String message = t.getMessage();
+        return "Unexpected exception thrown: " + t.getClass().getName() + (message == null ? "" : ": " + message);
+    }
+
+    /** Points the shared streams at this run's input and capture, and opens its class loader. */
+    private static URLClassLoader open(String classPath, String stdin, Capture out, Capture err) throws IOException {
+        STDIN.use(new ByteArrayInputStream(stdin.getBytes(StandardCharsets.UTF_8)));
+        STDOUT.use(out);
+        STDERR.use(err);
+        List<URL> urls = new ArrayList<>();
+        for (String entry : classPath.split(java.util.regex.Pattern.quote(File.pathSeparator))) {
+            if (!entry.isEmpty()) {
+                urls.add(Path.of(entry).toUri().toURL());
+            }
+        }
+        URLClassLoader loader = new URLClassLoader(urls.toArray(URL[]::new), Sandbox.class.getClassLoader());
+        Thread.currentThread().setContextClassLoader(loader);
+        return loader;
+    }
+
+    /** Flushes and disconnects the shared streams after a run. */
+    private static void close() {
+        System.out.flush();
+        System.err.flush();
+        Thread.currentThread().setContextClassLoader(Sandbox.class.getClassLoader());
+        STDIN.use(InputStream.nullInputStream());
+        STDOUT.use(OutputStream.nullOutputStream());
+        STDERR.use(OutputStream.nullOutputStream());
     }
 
     private static void launch(Class<?> type) throws ReflectiveOperationException {

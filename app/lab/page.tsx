@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { StartingJava } from "@/components/StartingJava";
-import { DEFAULT_TIME_LIMIT_MS, type RunOutcome, splitFiles } from "@/lib/java-sandbox";
+import { DEFAULT_TIME_LIMIT_MS, type RunOutcome, runProgram, splitFiles } from "@/lib/java/programs";
 import { getJava, preloadJava, useJavaRuntime, type JavaRuntimeState } from "@/lib/java-runtime";
 import {
   CHECK_INPUT_FILES,
@@ -47,7 +47,7 @@ export default function LabPage() {
   async function run() {
     setBusy(true);
     setOutcome(null);
-    const result = await getJava().run({
+    const result = await runProgram(getJava(), {
       files: splitFiles(sources, "Main.java"),
       inputFiles: splitFiles(inputFiles, "input.txt"),
       stdin,

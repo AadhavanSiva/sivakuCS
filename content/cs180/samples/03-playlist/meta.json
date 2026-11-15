@@ -1,0 +1,12 @@
+{
+  "title": "Playlist",
+  "points": 6,
+  "editable": [
+    "Playlist.java"
+  ],
+  "readOnly": [
+    "Main.java",
+    "Song.java",
+    "Track.java"
+  ]
+}

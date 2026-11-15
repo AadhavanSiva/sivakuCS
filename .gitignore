@@ -51,3 +51,6 @@ next-env.d.ts
 
 # Throwaway experiments
 .spike*.mjs
+
+# Built from content/ by npm run content (solutions are never in it)
+/generated/

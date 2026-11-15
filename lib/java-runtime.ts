@@ -8,11 +8,11 @@
 // keeps it alive; it is never disposed while the tab is open.
 import { useSyncExternalStore } from "react";
 import lock from "@/cheerpj-lock.json";
-import { JavaSandbox, type RuntimeInfo, type SandboxStatus } from "./java-sandbox";
+import { BrowserJava, type JavaStatus, type RuntimeInfo } from "./java/browser-java";
 
 export type JavaRuntimeState = {
   /** "idle" until something asks for Java. */
-  status: SandboxStatus | "idle";
+  status: JavaStatus | "idle";
   info: RuntimeInfo | null;
   /** Time from the first start until the JVM was ready (the cold start). */
   readyMs: number | null;
@@ -35,7 +35,7 @@ const INITIAL: JavaRuntimeState = {
 };
 
 let state = INITIAL;
-let sandbox: JavaSandbox | null = null;
+let java: BrowserJava | null = null;
 const listeners = new Set<() => void>();
 
 function update(change: Partial<JavaRuntimeState>) {
@@ -44,9 +44,9 @@ function update(change: Partial<JavaRuntimeState>) {
 }
 
 /** The shared JVM, started if it is not already running. */
-export function getJava(): JavaSandbox {
-  if (!sandbox) {
-    sandbox = new JavaSandbox({
+export function getJava(): BrowserJava {
+  if (!java) {
+    java = new BrowserJava({
       onStatus: (status) => update({ status }),
       onReady: (info, ms) => {
         const runtimeChanged = info.javaVersion !== lock.javaRuntime;
@@ -61,9 +61,9 @@ export function getJava(): JavaSandbox {
       },
       onWarm: (ms) => update({ warmMs: state.warmMs ?? ms }),
     });
-    sandbox.start();
+    java.start();
   }
-  return sandbox;
+  return java;
 }
 
 /** Starts loading Java in the background. Safe to call any number of times. */

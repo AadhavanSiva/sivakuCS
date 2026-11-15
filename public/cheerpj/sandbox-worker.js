@@ -2,24 +2,31 @@
 // program that never ends cannot freeze the page: the page stops it by
 // terminating this worker and starting a fresh one.
 //
-// Messages in:  { id, op: "run", files, inputFiles, stdin, mainClass }
-// Messages out: { type: "ready", info, ms }       JVM loaded, Run will work
+// The worker only relays calls to the static methods of
+// sivaku.sandbox.Sandbox; what to call and in what order lives in
+// lib/java (shared with `npm run verify`, which calls the same methods on
+// a local JDK).
+//
+// Messages in:  { id, method, args }              one Sandbox call
+// Messages out: { type: "ready", info, ms }       JVM loaded
 //               { type: "warm", ms }              compiler warmed up
 //               { type: "fatal", message }        the JVM could not start
-//               { id, type: "phase", phase }      "compiling", then "running"
-//               { id, type: "result", compile, run, files }
-//               { id, type: "error", message }
+//               { id, type: "started" }           the call began executing
+//               { id, type: "result", value }     its return value
+//               { id, type: "error", message }    it threw
 importScripts("https://cjrtnc.leaningtech.com/5.0/loader.js");
 
 // The program's working directory. CheerpJ resolves java.io relative paths
 // (new PrintWriter("out.txt")) against /files/ whatever user.dir says, so
 // user.dir is set to match and java.nio paths agree with java.io ones.
+// Must match BROWSER_PATHS in lib/java/browser-java.ts.
 const WORK = "/files";
-// The sandbox's own sources and classes, kept inside WORK but left alone
-// when WORK is cleared between runs.
 const OWN = ".sivaku";
-const SRC = `${WORK}/${OWN}/src`;
-const CLASSES = `${WORK}/${OWN}/classes`;
+
+const METHODS = new Set([
+  "info", "reset", "clearExcept", "writeFile", "readFile", "readTree",
+  "compile", "compileWith", "run", "callHarness",
+]);
 
 let Sandbox;
 
@@ -32,7 +39,7 @@ const ready = (async () => {
   postMessage({ type: "ready", info, ms: Math.round(performance.now() - started) });
 })();
 
-// One job at a time: runs share the source, class and working directories.
+// One call at a time, in order: calls share directories and System streams.
 let queue = ready.then(warmUp, (e) => {
   postMessage({ type: "fatal", message: describe(e) });
   throw e;
@@ -101,39 +108,14 @@ function describe(e) {
   return String(e);
 }
 
-const safeName = (name) =>
-  /^[A-Za-z0-9_.\-/]+$/.test(name) && !name.split("/").some((part) => part === ".." || part === OWN);
-
-async function run({ id, files = {}, inputFiles = {}, stdin = "", mainClass = "Main" }) {
-  for (const name of [...Object.keys(files), ...Object.keys(inputFiles)]) {
-    if (!safeName(name)) throw new Error(`Not a valid file name: ${name}`);
-  }
-
-  postMessage({ id, type: "phase", phase: "compiling" });
-  await Sandbox.reset(SRC);
-  await Sandbox.reset(CLASSES);
-  for (const [name, text] of Object.entries(files)) {
-    await Sandbox.writeFile(`${SRC}/${name}`, text);
-  }
-  const compile = JSON.parse(await Sandbox.compile(SRC, CLASSES));
-  if (!compile.ok) {
-    postMessage({ id, type: "result", compile, run: null, files: {} });
-    return;
-  }
-
-  await Sandbox.clearExcept(WORK, OWN);
-  for (const [name, text] of Object.entries(inputFiles)) {
-    await Sandbox.writeFile(`${WORK}/${name}`, text);
-  }
-  postMessage({ id, type: "phase", phase: "running" });
-  const result = JSON.parse(await Sandbox.run(CLASSES, mainClass, stdin));
-  const after = JSON.parse(await Sandbox.readTree(WORK, OWN));
-  postMessage({ id, type: "result", compile, run: result, files: after });
-}
-
 onmessage = (event) => {
-  if (event.data.op !== "run") return;
-  queue = queue.then(() => run(event.data)).catch((e) => {
-    postMessage({ id: event.data.id, type: "error", message: describe(e) });
-  });
+  const { id, method, args = [] } = event.data;
+  queue = queue
+    .then(async () => {
+      if (!METHODS.has(method)) throw new Error(`Unknown sandbox method: ${method}`);
+      postMessage({ id, type: "started" });
+      const value = await Sandbox[method](...args.map(String));
+      postMessage({ id, type: "result", value: value == null ? null : String(value) });
+    })
+    .catch((e) => postMessage({ id, type: "error", message: describe(e) }));
 };

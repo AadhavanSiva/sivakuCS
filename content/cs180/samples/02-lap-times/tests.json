@@ -1,0 +1,92 @@
+{
+  "kind": "files",
+  "timeLimitMs": 5000,
+  "cases": [
+    {
+      "name": "Sample from the handout",
+      "points": 0,
+      "inputFiles": {
+        "laps.txt": "62.5\n61.2\n64.0\n64.5\n"
+      },
+      "outputFiles": {
+        "best.txt": "Laps: 4\nFastest: 61.20\nAverage: 63.05\n"
+      },
+      "stdout": ""
+    },
+    {
+      "name": "Case 1",
+      "points": 1,
+      "inputFiles": {
+        "laps.txt": "59.999\n"
+      },
+      "outputFiles": {
+        "best.txt": "Laps: 1\nFastest: 60.00\nAverage: 60.00\n"
+      },
+      "stdout": ""
+    },
+    {
+      "name": "Case 2",
+      "points": 1,
+      "outputFiles": {
+        "best.txt": null
+      },
+      "stdout": "No laps recorded.\n"
+    },
+    {
+      "name": "Case 3",
+      "points": 1,
+      "inputFiles": {
+        "laps.txt": "70\n\n68.5\n\n71\n"
+      },
+      "outputFiles": {
+        "best.txt": "Laps: 3\nFastest: 68.50\nAverage: 69.83\n"
+      },
+      "stdout": ""
+    },
+    {
+      "name": "Case 4",
+      "points": 1,
+      "inputFiles": {
+        "laps.txt": "75\n74\n73\n72.25\n"
+      },
+      "outputFiles": {
+        "best.txt": "Laps: 4\nFastest: 72.25\nAverage: 73.56\n"
+      },
+      "stdout": ""
+    },
+    {
+      "name": "Case 5",
+      "points": 1,
+      "inputFiles": {
+        "laps.txt": "\n\n"
+      },
+      "outputFiles": {
+        "best.txt": null
+      },
+      "stdout": "No laps recorded.\n"
+    },
+    {
+      "name": "Case 6",
+      "points": 1,
+      "inputFiles": {
+        "best.txt": "Laps: 9\nFastest: 1.00\nAverage: 1.00\n",
+        "laps.txt": "66\n65\n"
+      },
+      "outputFiles": {
+        "best.txt": "Laps: 2\nFastest: 65.00\nAverage: 65.50\n"
+      },
+      "stdout": ""
+    },
+    {
+      "name": "Case 7",
+      "points": 1,
+      "inputFiles": {
+        "laps.txt": "58.4\n61.6\n60\n57.9\n62.1\n"
+      },
+      "outputFiles": {
+        "best.txt": "Laps: 5\nFastest: 57.90\nAverage: 60.00\n"
+      },
+      "stdout": ""
+    }
+  ]
+}
