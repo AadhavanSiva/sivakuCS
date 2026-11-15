@@ -13,7 +13,8 @@
     "test:e2e": "playwright test",
     "check:cheerpj": "node scripts/check-cheerpj.mjs",
     "verify": "tsx scripts/verify.ts",
-    "content": "tsx scripts/build-content.ts"
+    "content": "tsx scripts/build-content.ts",
+    "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
     "next": "16.4.6",

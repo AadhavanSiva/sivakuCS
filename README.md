@@ -75,6 +75,7 @@ Then open a new terminal and follow step 5 above.
 | `npm run dev` | Development server on port 3000 |
 | `npm run build` | Production build |
 | `npm run lint` | ESLint |
+| `npm run typecheck` | Generates Next.js route types, then checks types with `tsc` |
 | `npm run content` | Bundles `content/` into `generated/content.json` for the site, without solutions. Runs by itself before `dev` and `build` |
 | `npm run verify` | Checks every question: its structure, that the reference solution passes every test, and that each broken solution fails a hidden one. Needs JDK 25 |
 | `npm run test:e2e` | Browser tests (Playwright, headless Chromium). Starts a dev server on port 3100 unless one is running there. The grading tests also need JDK 25 |

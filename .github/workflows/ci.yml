@@ -40,8 +40,10 @@ jobs:
       - name: Bundle content
         run: npm run content
 
+      # next typegen writes the route types (LayoutProps and friends) that
+      # tsc needs; locally they come from an earlier dev or build.
       - name: Types
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Lint
         run: npm run lint
