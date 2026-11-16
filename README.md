@@ -385,30 +385,44 @@ content/<course>/<exam>/
     question.md      the description and the sample (no hints, no topic label)
     meta.json        {"title", "points", "editable": [...], "readOnly": [...],
                       "mainClass"?: "Main", "harnessClass"?: "Harness"}
-    starter/         what the student starts with: an empty Main.java for a
-                     whole-program question; otherwise the editable files with
+    starter/         what the student starts with: Main.java holding an empty
+                     void main() { } for a whole-program question (the
+                     samples start from an empty file); otherwise the editable files with
                      signatures, doc comments and stub bodies (return 0;)
     given/           the read-only files, shown as locked tabs; often a small Main.java
     solution/        the reference solution's editable files
     broken/          a deliberately wrong solution; or several, one per subfolder
     tests.json       the test cases
     harness/         harness questions only: the hidden test driver
+    helpers/         classes compiled with the student's code for Run and Test
+                     but not shown, like a pre-compiled helper (Grid.read())
+    alternates/<set>/ other versions of given files; a case with "against": "<set>"
+                     compiles the student's code again with them (a parent class
+                     written differently, so copying its logic instead of calling
+                     super fails)
+  slot-NN/variant-a/ the same question files, as one variant of a slot
 ```
+
+The midterms use slots, so each question can grow into a bank: a slot is
+one question of the exam, and each `variant-*` folder inside it is an
+interchangeable version (new scenario, same skill, same points). The exam
+serves the slot's first variant for now; `npm run verify` checks every
+variant, and fails if two variants of a slot are worth different points.
 
 `tests.json` is `{"kind", "timeLimitMs"?: 5000, "cases": [...]}`. Each case
 has a free-form `name` and its own `points` (a whole number, 0 or more).
 `"sample": true` marks the tests from the handout: a failed sample says why,
 and every other case is hidden and shows only pass or fail. Sample tests may
-be worth points. Case points add up to the question's `points`, which is 5
-to 13; an exam's questions add up to 100 unless `exam.json` says
-`"draft": true`.
+be worth points. Case points add up to the question's `points`, which is 4
+to 16 (the midterms' range); an exam's questions add up to 100 unless
+`exam.json` says `"draft": true`.
 
 The three kinds of test:
 
 | `kind` | Each case has | Passes when |
 |---|---|---|
-| `stdio` | `stdin`, and `stdout` or `outputLine` | running `Main` with that input prints exactly that output, or that line |
-| `files` | `inputFiles` (left out for none), `outputFiles` (`null` means "must not exist"), optionally `stdout` or `outputLine` | the files after the run, and the output if given, are exactly as expected |
+| `stdio` | `stdin`, and `stdout`, `outputLine` or `labelledLines` | running `Main` with that input prints exactly that output, that line, or those lines |
+| `files` | `inputFiles` (left out for none), `outputFiles` (`null` means "must not exist"), optionally an output check as for `stdio` | the files after the run, and the output if given, are exactly as expected |
 | `harness` | `call`: a public static method of the harness class | the method returns rather than throwing |
 
 For Ed's Midterm 1 pattern, one test per output line, give each case an
@@ -421,7 +435,40 @@ For Ed's Midterm 1 pattern, one test per output line, give each case an
 ```
 
 Cases with the same input share one run of the program. A failed line reads
-`line 2 ==> expected: <Words: 4> but was: <Words: 3>`.
+`line 2 ==> expected: <Words: 4> but was: <Words: 3>`. Line numbers count
+every line, prompts included, so a missing prompt fails the lines after it;
+a negative number counts from the end (`-1` is the last line).
+
+`labelledLines` finds result lines by their label instead, so a missing or
+reworded prompt (or a menu worded as the student likes) changes nothing: the
+lines that start with `prefix`, in order, must be exactly `lines`.
+
+```json
+{ "name": "Case 1.2", "points": 2, "stdin": "7\n8\n",
+  "labelledLines": { "prefix": "Average per day: ", "lines": ["Average per day: 7.50"] } },
+{ "name": "Case 2.1", "points": 1, "stdin": "1\n1\n",
+  "labelledLines": { "prefix": "Battery: ", "lines": ["Battery: 50", "Battery: 35", "Battery: 20"] } }
+```
+
+A failed one reads `the "Average per day:" line ==> expected: <Average per day: 7.50> but was: <Average per day: 7.00>`.
+`labelledLines` may also be a list, to check several labels in one case
+(Midterm 2's input loop checks its `Invalid:` lines, `Table:` and
+`Attempts:` together); an empty `lines` means no line may have that label.
+
+Midterm 1 follows the course's pattern (in `reference-private/`, which is
+gitignored): only result lines are tests, never prompts, and each is found
+by its label. Sample tests are named after the line they check ("Sample run
+from the handout: the Average line", with ", exact text" for formatted
+strings) and are worth 1 or 2 points, 2 for the line that needs the hard
+part. Hidden tests are "Case N" when one line of a run is checked and
+"Case N.1", "Case N.2"... when several are. Loop output is one test, "the
+Battery lines, in order". Fixed output (Q1) is checked line by line and as
+a whole, as is a zero divisor's single line. In the Feedback panel every
+row opens: a failed sample says why, any other case says only "Passed." or
+"Failed: Case 1: did not pass."
+
+Midterm 2's harness questions score as Ed does: "Sample from the handout"
+is worth 0, then "Case 1" to "Case N" are 1 point each.
 
 A harness is Java in `harness/` that calls the student's code, including
 with classes the student has never seen. It checks results with
@@ -444,8 +491,11 @@ messages. Line endings never count.
 
 ### Reference sheets
 
-`reference.md` is Markdown tables whose first column holds code and second
-column says what it does. Autocomplete reads the code spans: `Integer.parseInt(s)`
+`reference.md` is Markdown tables in Ed's three columns: the code, what it
+returns, and what it does (two columns, code and what it does, also work).
+Autocomplete reads the code spans, and uses the return type to complete
+chained calls such as `s.trim().`. Picking a suggestion inserts only the
+name; the parameters show in the dropdown. `Integer.parseInt(s)`
 is a static method of `Integer`, `new PrintWriter(name)` a constructor, and
 `s.trim()` an instance method of whatever `s` is. Say what each receiver is
 in a comment at the top (it is not shown); `s` and `t` default to `String`:

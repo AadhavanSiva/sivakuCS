@@ -25,6 +25,7 @@ import java.lang.reflect.Modifier;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -111,7 +112,32 @@ public final class Sandbox {
     private static void deleteTree(Path path) throws IOException {
         try (Stream<Path> walk = Files.walk(path)) {
             for (Path p : walk.sorted(Comparator.reverseOrder()).toList()) {
-                Files.delete(p);
+                delete(p);
+            }
+        }
+    }
+
+    /**
+     * Deletes one file. On Windows a file that a student's program left open
+     * (a PrintWriter never closed) cannot be deleted until its stream is
+     * garbage collected, so collect and try again a few times.
+     */
+    private static void delete(Path p) throws IOException {
+        for (int attempt = 0; ; attempt++) {
+            try {
+                Files.deleteIfExists(p);
+                return;
+            } catch (FileSystemException e) {
+                if (attempt == 10) {
+                    throw e;
+                }
+                System.gc();
+                try {
+                    Thread.sleep(20);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
             }
         }
     }
@@ -434,6 +460,24 @@ public final class Sandbox {
         STDIN.use(InputStream.nullInputStream());
         STDOUT.use(OutputStream.nullOutputStream());
         STDERR.use(OutputStream.nullOutputStream());
+        drainIoReader();
+    }
+
+    /**
+     * java.lang.IO keeps one buffered reader on System.in for the life of the
+     * JVM, so input a run left unread (it crashed, or simply stopped reading)
+     * would be read first by the next run. With System.in now empty, read
+     * what is left in that buffer until IO.readln() reports the end.
+     */
+    private static void drainIoReader() {
+        try {
+            Method readln = Class.forName("java.lang.IO").getMethod("readln");
+            for (int i = 0; i < 1_000_000 && readln.invoke(null) != null; i++) {
+                // discard
+            }
+        } catch (ReflectiveOperationException | RuntimeException | Error e) {
+            // No java.lang.IO on this runtime, or nothing to drain.
+        }
     }
 
     private static void launch(Class<?> type) throws ReflectiveOperationException {

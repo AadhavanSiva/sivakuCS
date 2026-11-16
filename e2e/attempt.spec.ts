@@ -150,7 +150,7 @@ test("Submit asks first, then shows the results; the submitted code stays read-o
   const q3 = page.getByTestId("result-q3");
   await expect(q3.getByTestId("testcases-header")).toHaveText("TESTCASES   2 / 7 passed, 2 points");
   await expect(q3.locator('[data-testid="testcase"][data-passed="true"]')).toHaveCount(2);
-  await q3.getByTestId("testcase-toggle").click();
+  await q3.locator('[data-name="Sample from the handout"]').getByTestId("testcase-toggle").click();
   await expect(q3.getByTestId("sample-reason")).toContainText("expected: <345> but was: <0>");
   // Q2 was left empty: it compiles, but there is no main to run.
   await page.getByTestId("result-q2").getByRole("button", { name: /Q2: Lap times/ }).click();
@@ -165,6 +165,11 @@ test("Submit asks first, then shows the results; the submitted code stays read-o
   await expect(page.getByTestId("submit")).toHaveCount(0);
   await expect(page.getByTestId("run")).toBeDisabled();
   await expect(page.getByTestId("test")).toBeDisabled();
+  // Feedback shows the submitted results, scrolled into view.
+  const feedback = page.getByTestId("section-feedback");
+  await expect(feedback.getByTestId("submitted-status")).toBeVisible();
+  await expect(feedback.getByTestId("testcases-header")).toHaveText(/^TESTCASES   (\d+) \/ \1 passed, 6 points$/);
+  await expect(feedback.getByTestId("testcases-header")).toBeInViewport();
   expect(await fileText(page, `${TICKET}/Main.java`)).toBe(TICKET_SOLUTION);
   await page.locator(".monaco-editor").first().click();
   await page.keyboard.type("// change");

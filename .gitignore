@@ -60,3 +60,6 @@ next-env.d.ts
 
 # Monaco's prebuilt files, copied from node_modules by scripts/copy-monaco.mjs
 /public/monaco/
+
+# private reference copies of real exam questions (never commit, never deploy)
+reference-private/

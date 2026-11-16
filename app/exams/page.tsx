@@ -24,7 +24,7 @@ export default function ExamsPage() {
               >
                 <span className="font-medium">
                   {exam.meta.title}
-                  {exam.meta.draft && <span className="ml-2 text-xs text-neutral-500">(samples)</span>}
+                  {exam.meta.draft && <span className="ml-2 text-xs text-neutral-500">(draft)</span>}
                 </span>
                 <span className="text-sm text-neutral-500">
                   {exam.questions.length} questions · {points} points · {exam.meta.minutes} minutes

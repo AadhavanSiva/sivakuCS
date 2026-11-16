@@ -161,6 +161,8 @@ test("void main() with no class compiles, runs and grades one test per output li
   await page.getByTestId("test").click();
   const feedback = page.getByTestId("section-feedback");
   await expect(feedback.getByTestId("testcases-header")).toHaveText("TESTCASES   12 / 12 passed, 12 points", { timeout: 120_000 });
+  // The left pane scrolls down to the results.
+  await expect(feedback.getByTestId("testcases-header")).toBeInViewport();
   await expect(feedback.locator('[data-name="Sample run from the handout: the Words line"] [data-testid="testcase-points"]')).toHaveText("1/1");
   await expect(feedback.locator('[data-name="Case 3.2"]')).toHaveAttribute("data-passed", "true");
 
@@ -176,7 +178,9 @@ test("void main() with no class compiles, runs and grades one test per output li
   await expect(longest.getByTestId("sample-reason")).toHaveText("Failed: line 4 ==> expected: <Longest: quick> but was: <Longest: brown>");
   const hiddenFailure = feedback.locator('[data-name="Case 2.3"]');
   await expect(hiddenFailure).toHaveAttribute("data-passed", "false");
-  await expect(hiddenFailure.getByTestId("testcase-toggle")).toHaveCount(0);
+  await hiddenFailure.getByTestId("testcase-toggle").click();
+  await expect(hiddenFailure.getByTestId("testcase-detail")).toHaveText("Failed: Case 2.3: did not pass.");
+  await expect(hiddenFailure.getByTestId("sample-reason")).toHaveCount(0);
 });
 
 test("leaving the exam and coming back keeps the editor working", async ({ page }) => {

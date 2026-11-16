@@ -1,0 +1,118 @@
+{
+  "kind": "stdio",
+  "timeLimitMs": 5000,
+  "cases": [
+    {
+      "name": "Sample run from the handout: the Count line",
+      "points": 1,
+      "sample": true,
+      "stdin": "Grand Opening Sale\nn\n",
+      "labelledLines": {
+        "prefix": "Count: ",
+        "lines": [
+          "Count: 3"
+        ]
+      }
+    },
+    {
+      "name": "Sample run from the handout: the First index line",
+      "points": 1,
+      "sample": true,
+      "stdin": "Grand Opening Sale\nn\n",
+      "labelledLines": {
+        "prefix": "First index: ",
+        "lines": [
+          "First index: 3"
+        ]
+      }
+    },
+    {
+      "name": "Case 1.1",
+      "points": 1,
+      "stdin": "Moonlight Market tonight\nm\n",
+      "labelledLines": {
+        "prefix": "Count: ",
+        "lines": [
+          "Count: 2"
+        ]
+      }
+    },
+    {
+      "name": "Case 1.2",
+      "points": 1,
+      "stdin": "Moonlight Market tonight\nm\n",
+      "labelledLines": {
+        "prefix": "First index: ",
+        "lines": [
+          "First index: 0"
+        ]
+      }
+    },
+    {
+      "name": "Case 2.1",
+      "points": 1,
+      "stdin": "Fresh bread daily\nz\n",
+      "labelledLines": {
+        "prefix": "Count: ",
+        "lines": [
+          "Count: 0"
+        ]
+      }
+    },
+    {
+      "name": "Case 2.2",
+      "points": 1,
+      "stdin": "Fresh bread daily\nz\n",
+      "labelledLines": {
+        "prefix": "First index: ",
+        "lines": [
+          "First index: -1"
+        ]
+      }
+    },
+    {
+      "name": "Case 3.1",
+      "points": 1,
+      "stdin": "Open late on Friday\ny\n",
+      "labelledLines": {
+        "prefix": "Count: ",
+        "lines": [
+          "Count: 1"
+        ]
+      }
+    },
+    {
+      "name": "Case 3.2",
+      "points": 1,
+      "stdin": "Open late on Friday\ny\n",
+      "labelledLines": {
+        "prefix": "First index: ",
+        "lines": [
+          "First index: 18"
+        ]
+      }
+    },
+    {
+      "name": "Case 4.1",
+      "points": 1,
+      "stdin": "Bus stops at Seventh Street\nS\n",
+      "labelledLines": {
+        "prefix": "Count: ",
+        "lines": [
+          "Count: 5"
+        ]
+      }
+    },
+    {
+      "name": "Case 4.2",
+      "points": 1,
+      "stdin": "Bus stops at Seventh Street\nS\n",
+      "labelledLines": {
+        "prefix": "First index: ",
+        "lines": [
+          "First index: 2"
+        ]
+      }
+    }
+  ]
+}

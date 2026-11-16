@@ -49,18 +49,38 @@ test.beforeEach(async ({ page }) => {
   await page.evaluate(() => window.localStorage.clear());
 });
 
-test("a dot after a class name offers the reference sheet's methods, inserted as a call", async ({ page }) => {
+test("a dot after a class name offers the reference sheet's methods; picking one inserts only its name", async ({ page }) => {
   await openExam(page, `${EXAM}#1`);
   await editAt(page, "void main() {\n    int age = Integer\n}\n", "Integer");
   await page.keyboard.type(".");
   expect(await suggestionLabels(page)).toEqual(["parseInt"]);
+  // The parameters show in the dropdown...
+  await expect(suggestions(page).first()).toContainText("parseInt(s)");
   await expect(page.locator(".suggest-widget.visible")).toContainText("Integer.parseInt(s)");
 
+  // ...but only the name is inserted.
   await page.keyboard.press("Enter");
-  expect(await editorText(page)).toContain("int age = Integer.parseInt(s)");
-  // The parameter is selected, ready to be typed over.
-  await page.keyboard.type("IO.readln()");
+  expect(await editorText(page)).toContain("    int age = Integer.parseInt\n");
+  await page.keyboard.type("(IO.readln())");
   expect(await editorText(page)).toContain("int age = Integer.parseInt(IO.readln())");
+});
+
+test("picking IO.println inserts only the name", async ({ page }) => {
+  await openExam(page, `${EXAM}#4`);
+  await editAt(page, "void main() {\n    IO\n}\n", "IO");
+  await page.keyboard.type(".printl");
+  await expect(suggestions(page).first()).toContainText("println(x)");
+  await page.keyboard.press("Enter");
+  expect(await editorText(page)).toBe("void main() {\n    IO.println\n}\n");
+});
+
+test("picking a given class's method inserts only the name", async ({ page }) => {
+  await openExam(page, `${EXAM}#3`);
+  await editAt(page, "public class Playlist {\n    void f(Track t) {\n        t\n    }\n}\n", "        t");
+  await page.keyboard.type(".getT");
+  await expect(suggestions(page).first()).toContainText("getTitle()");
+  await page.keyboard.press("Enter");
+  expect(await editorText(page)).toContain("        t.getTitle\n");
 });
 
 test("a dot after a String variable offers String's methods", async ({ page }) => {

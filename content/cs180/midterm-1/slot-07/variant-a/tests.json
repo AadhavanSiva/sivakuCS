@@ -1,0 +1,107 @@
+{
+  "kind": "stdio",
+  "timeLimitMs": 5000,
+  "cases": [
+    {
+      "name": "Sample run from the handout: the Reversed line",
+      "points": 2,
+      "sample": true,
+      "stdin": "lanterns float over the lake\n",
+      "labelledLines": {
+        "prefix": "Reversed: ",
+        "lines": [
+          "Reversed: lake the over float lanterns"
+        ]
+      }
+    },
+    {
+      "name": "Sample run from the handout: the Letters line",
+      "points": 1,
+      "sample": true,
+      "stdin": "lanterns float over the lake\n",
+      "labelledLines": {
+        "prefix": "Letters: ",
+        "lines": [
+          "Letters: 24"
+        ]
+      }
+    },
+    {
+      "name": "Case 1.1",
+      "points": 1,
+      "stdin": "bright stars above\n",
+      "labelledLines": {
+        "prefix": "Reversed: ",
+        "lines": [
+          "Reversed: above stars bright"
+        ]
+      }
+    },
+    {
+      "name": "Case 1.2",
+      "points": 1,
+      "stdin": "bright stars above\n",
+      "labelledLines": {
+        "prefix": "Letters: ",
+        "lines": [
+          "Letters: 16"
+        ]
+      }
+    },
+    {
+      "name": "Case 2.1",
+      "points": 1,
+      "stdin": "a bb ccc\n",
+      "labelledLines": {
+        "prefix": "Reversed: ",
+        "lines": [
+          "Reversed: ccc bb a"
+        ]
+      }
+    },
+    {
+      "name": "Case 2.2",
+      "points": 1,
+      "stdin": "a bb ccc\n",
+      "labelledLines": {
+        "prefix": "Letters: ",
+        "lines": [
+          "Letters: 6"
+        ]
+      }
+    },
+    {
+      "name": "Case 3.1",
+      "points": 1,
+      "stdin": "Owls Hunt At Night\n",
+      "labelledLines": {
+        "prefix": "Reversed: ",
+        "lines": [
+          "Reversed: Night At Hunt Owls"
+        ]
+      }
+    },
+    {
+      "name": "Case 3.2",
+      "points": 1,
+      "stdin": "Owls Hunt At Night\n",
+      "labelledLines": {
+        "prefix": "Letters: ",
+        "lines": [
+          "Letters: 15"
+        ]
+      }
+    },
+    {
+      "name": "Case 4",
+      "points": 1,
+      "stdin": "zig zag\n",
+      "labelledLines": {
+        "prefix": "Reversed: ",
+        "lines": [
+          "Reversed: zag zig"
+        ]
+      }
+    }
+  ]
+}

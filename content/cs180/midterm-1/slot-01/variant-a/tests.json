@@ -1,0 +1,42 @@
+{
+  "kind": "stdio",
+  "timeLimitMs": 5000,
+  "cases": [
+    {
+      "name": "Sample run from the handout: line 1 of the output",
+      "points": 1,
+      "sample": true,
+      "stdin": "",
+      "outputLine": {
+        "number": 1,
+        "text": "Harrow Point Lighthouse Museum"
+      }
+    },
+    {
+      "name": "Sample run from the handout: line 2 of the output",
+      "points": 1,
+      "sample": true,
+      "stdin": "",
+      "outputLine": {
+        "number": 2,
+        "text": ""
+      }
+    },
+    {
+      "name": "Sample run from the handout: line 3 of the output",
+      "points": 1,
+      "sample": true,
+      "stdin": "",
+      "outputLine": {
+        "number": 3,
+        "text": "Open every day from 10 to 5"
+      }
+    },
+    {
+      "name": "Case 1",
+      "points": 1,
+      "stdin": "",
+      "stdout": "Harrow Point Lighthouse Museum\n\nOpen every day from 10 to 5\n"
+    }
+  ]
+}

@@ -1,0 +1,107 @@
+{
+  "kind": "stdio",
+  "timeLimitMs": 5000,
+  "cases": [
+    {
+      "name": "Sample run from the handout: the Initials line, exact text",
+      "points": 1,
+      "sample": true,
+      "stdin": "Rosalind Thackeray\n",
+      "labelledLines": {
+        "prefix": "Initials: ",
+        "lines": [
+          "Initials: RT"
+        ]
+      }
+    },
+    {
+      "name": "Sample run from the handout: the Member code line, exact text",
+      "points": 2,
+      "sample": true,
+      "stdin": "Rosalind Thackeray\n",
+      "labelledLines": {
+        "prefix": "Member code: ",
+        "lines": [
+          "Member code: NDth17"
+        ]
+      }
+    },
+    {
+      "name": "Case 1.1",
+      "points": 1,
+      "stdin": "tomas ruiz\n",
+      "labelledLines": {
+        "prefix": "Initials: ",
+        "lines": [
+          "Initials: TR"
+        ]
+      }
+    },
+    {
+      "name": "Case 1.2",
+      "points": 1,
+      "stdin": "tomas ruiz\n",
+      "labelledLines": {
+        "prefix": "Member code: ",
+        "lines": [
+          "Member code: ASru9"
+        ]
+      }
+    },
+    {
+      "name": "Case 2.1",
+      "points": 1,
+      "stdin": "MARGUERITE OLLER\n",
+      "labelledLines": {
+        "prefix": "Initials: ",
+        "lines": [
+          "Initials: MO"
+        ]
+      }
+    },
+    {
+      "name": "Case 2.2",
+      "points": 1,
+      "stdin": "MARGUERITE OLLER\n",
+      "labelledLines": {
+        "prefix": "Member code: ",
+        "lines": [
+          "Member code: TEol15"
+        ]
+      }
+    },
+    {
+      "name": "Case 3.1",
+      "points": 1,
+      "stdin": "eLLA vanderMEER\n",
+      "labelledLines": {
+        "prefix": "Initials: ",
+        "lines": [
+          "Initials: EV"
+        ]
+      }
+    },
+    {
+      "name": "Case 3.2",
+      "points": 1,
+      "stdin": "eLLA vanderMEER\n",
+      "labelledLines": {
+        "prefix": "Member code: ",
+        "lines": [
+          "Member code: LAva14"
+        ]
+      }
+    },
+    {
+      "name": "Case 4",
+      "points": 1,
+      "stdin": "Ines OConnor\n",
+      "labelledLines": {
+        "prefix": "Member code: ",
+        "lines": [
+          "Member code: ESoc11"
+        ]
+      }
+    }
+  ]
+}

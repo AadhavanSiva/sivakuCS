@@ -12,6 +12,7 @@ import {
   examDirs,
   loadBrokenVariants,
   loadExam,
+  loadQuestion,
   loadSolution,
   questionDirs,
   readFiles,
@@ -30,7 +31,7 @@ function checkExam(dir: string, meta: ExamMeta, questionPoints: number[], proble
   if (!(meta.minutes > 0)) problems.push("exam.json: minutes must be a positive number");
   if (typeof meta.instructions !== "string") problems.push("exam.json: needs instructions");
   if (!existsSync(join(dir, "reference.md"))) problems.push("reference.md is missing");
-  if (questionPoints.length === 0) problems.push("no questions (folders named like 01-some-name)");
+  if (questionPoints.length === 0) problems.push("no questions (folders named like 01-some-name or slot-01/variant-a)");
   const total = questionPoints.reduce((a, b) => a + b, 0);
   if (!meta.draft && total !== 100) problems.push(`questions are worth ${total} points in all; an exam must total 100`);
 }
@@ -41,8 +42,8 @@ function checkQuestion(dir: string, question: Question, problems: Problems) {
     if (!existsSync(join(dir, file))) problems.push(`${file} is missing`);
   }
   if (!meta.title) problems.push("meta.json: needs a title");
-  if (!Number.isInteger(meta.points) || meta.points < 5 || meta.points > 13) {
-    problems.push(`meta.json: points is ${meta.points}; a question is worth 5 to 13`);
+  if (!Number.isInteger(meta.points) || meta.points < 4 || meta.points > 16) {
+    problems.push(`meta.json: points is ${meta.points}; a question is worth 4 to 16`);
   }
   if (!Array.isArray(meta.editable) || meta.editable.length === 0) problems.push("meta.json: editable lists no files");
   if (!Array.isArray(meta.readOnly)) problems.push("meta.json: readOnly must be a list (it may be empty)");
@@ -54,6 +55,17 @@ function checkQuestion(dir: string, question: Question, problems: Problems) {
   }
   for (const name of meta.readOnly ?? []) {
     if (!(name in question.given)) problems.push(`given/${name} is missing (listed in readOnly)`);
+  }
+  for (const [set, files] of Object.entries(question.alternates ?? {})) {
+    for (const name of Object.keys(files)) {
+      if (!(name in question.given)) problems.push(`alternates/${set}/${name} does not replace a given file`);
+    }
+  }
+  for (const c of question.tests.cases ?? []) {
+    if (c.against && !question.alternates?.[c.against]) problems.push(`tests.json: ${c.name} is against alternates/${c.against}/, which is missing`);
+  }
+  for (const name of Object.keys(question.helpers ?? {})) {
+    if (name in question.given || meta.editable?.includes(name)) problems.push(`helpers/${name} is also a given or editable file`);
   }
   for (const name of Object.keys(question.given)) {
     if (!meta.readOnly?.includes(name)) problems.push(`given/${name} is not listed in readOnly`);
@@ -73,10 +85,18 @@ function checkQuestion(dir: string, question: Question, problems: Problems) {
     names.add(c.name);
     if (!Number.isInteger(c.points) || c.points < 0) problems.push(`tests.json: ${c.name} must be worth a whole number of points`);
     const line = c.outputLine;
-    if (line && (!Number.isInteger(line.number) || line.number < 1 || typeof line.text !== "string")) {
-      problems.push(`tests.json: ${c.name} has an outputLine without a line number from 1 and its text`);
+    if (line && (!Number.isInteger(line.number) || line.number === 0 || typeof line.text !== "string")) {
+      problems.push(`tests.json: ${c.name} has an outputLine without a line number (from 1, or -1 for the last) and its text`);
     }
-    const checksOutput = c.stdout !== undefined || line !== undefined;
+    const labelled = c.labelledLines;
+    const groups = Array.isArray(labelled) ? labelled : labelled ? [labelled] : [];
+    const wellFormed = (g: { prefix: string; lines: string[] }) =>
+      typeof g?.prefix === "string" && g.prefix !== "" && Array.isArray(g.lines) &&
+      g.lines.every((l) => typeof l === "string" && l.startsWith(g.prefix));
+    if (labelled !== undefined && (groups.length === 0 || !groups.every(wellFormed))) {
+      problems.push(`tests.json: ${c.name} needs labelledLines with a prefix and lines that each start with it`);
+    }
+    const checksOutput = c.stdout !== undefined || line !== undefined || labelled !== undefined;
     if (tests.kind === "stdio" && !checksOutput) problems.push(`tests.json: ${c.name} checks neither stdout nor an outputLine`);
     if (tests.kind === "files" && !c.outputFiles && !checksOutput) {
       problems.push(`tests.json: ${c.name} checks neither files nor output`);
@@ -118,12 +138,25 @@ async function main() {
       for (const problem of examProblems) console.log(`  ✗ ${problem}`);
       failures += examProblems.length;
 
-      for (const [i, dir] of questionDirs(examDir).entries()) {
-        const question = exam.questions[i];
+      // Every variant of every slot, not only the one the exam serves, so a
+      // variant is verified before it is ever swapped in.
+      const slotPoints = new Map<string, number>();
+      for (const dir of questionDirs(examDir, { allVariants: true })) {
+        const question = loadQuestion(dir);
         if (filter && !question.id.startsWith(filter) && !filter.startsWith(question.id) && filter !== exam.id) continue;
         questionsChecked++;
         const problems: Problems = [];
         checkQuestion(dir, question, problems);
+
+        // Variants of a slot are worth the same, so the exam's total does not depend on which is served.
+        const slot = /^(.*\/slot-\d{2})\/variant-/.exec(question.id)?.[1];
+        if (slot) {
+          const points = slotPoints.get(slot);
+          if (points === undefined) slotPoints.set(slot, question.meta.points);
+          else if (points !== question.meta.points) {
+            problems.push(`meta.json: worth ${question.meta.points}, but the slot's first variant is worth ${points}`);
+          }
+        }
 
         if (problems.length === 0) {
           const solution = await gradeQuestion(java, question, loadSolution(dir));
@@ -140,7 +173,7 @@ async function main() {
           }
         }
 
-        const label = `${question.id.split("/").pop()} (${question.meta.points} pts, ${question.tests.kind})`;
+        const label = `${question.id.slice(exam.id.length + 1)} (${question.meta.points} pts, ${question.tests.kind})`;
         if (problems.length === 0) {
           console.log(`  ✓ ${label}`);
         } else {

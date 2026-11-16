@@ -1,0 +1,80 @@
+{
+  "kind": "stdio",
+  "timeLimitMs": 5000,
+  "cases": [
+    {
+      "name": "Sample run from the handout: the Divisible line",
+      "points": 1,
+      "sample": true,
+      "stdin": "47\n6\n",
+      "labelledLines": {
+        "prefix": "Divisible: ",
+        "lines": [
+          "Divisible: no"
+        ]
+      }
+    },
+    {
+      "name": "Sample run from the handout: the Remainder line",
+      "points": 1,
+      "sample": true,
+      "stdin": "47\n6\n",
+      "labelledLines": {
+        "prefix": "Remainder: ",
+        "lines": [
+          "Remainder: 5"
+        ]
+      }
+    },
+    {
+      "name": "Case 1.1",
+      "points": 1,
+      "stdin": "-47\n6\n",
+      "labelledLines": {
+        "prefix": "Divisible: ",
+        "lines": [
+          "Divisible: no"
+        ]
+      }
+    },
+    {
+      "name": "Case 1.2",
+      "points": 1,
+      "stdin": "-47\n6\n",
+      "labelledLines": {
+        "prefix": "Quotient: ",
+        "lines": [
+          "Quotient: -7"
+        ]
+      }
+    },
+    {
+      "name": "Case 1.3",
+      "points": 1,
+      "stdin": "-47\n6\n",
+      "labelledLines": {
+        "prefix": "Remainder: ",
+        "lines": [
+          "Remainder: -5"
+        ]
+      }
+    },
+    {
+      "name": "Case 2",
+      "points": 2,
+      "stdin": "13\n0\n",
+      "stdout": "Enter the dividend:\nEnter the divisor:\nDivision by zero is undefined.\n"
+    },
+    {
+      "name": "Case 3",
+      "points": 1,
+      "stdin": "48\n-6\n",
+      "labelledLines": {
+        "prefix": "Divisible: ",
+        "lines": [
+          "Divisible: yes"
+        ]
+      }
+    }
+  ]
+}

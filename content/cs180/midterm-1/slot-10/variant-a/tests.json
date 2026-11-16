@@ -1,0 +1,145 @@
+{
+  "kind": "stdio",
+  "timeLimitMs": 5000,
+  "cases": [
+    {
+      "name": "Sample run from the handout: the Battery lines, in order",
+      "points": 2,
+      "sample": true,
+      "stdin": "1\n2\n1\n3\n",
+      "labelledLines": {
+        "prefix": "Battery: ",
+        "lines": [
+          "Battery: 50",
+          "Battery: 35",
+          "Battery: 45",
+          "Battery: 30"
+        ]
+      }
+    },
+    {
+      "name": "Sample run from the handout: the final line",
+      "points": 2,
+      "sample": true,
+      "stdin": "1\n2\n1\n3\n",
+      "outputLine": {
+        "number": -1,
+        "text": "Final battery: 30"
+      }
+    },
+    {
+      "name": "Case 1.1",
+      "points": 2,
+      "stdin": "2\n2\n1\n3\n",
+      "labelledLines": {
+        "prefix": "Battery: ",
+        "lines": [
+          "Battery: 50",
+          "Battery: 60",
+          "Battery: 60",
+          "Battery: 45"
+        ]
+      }
+    },
+    {
+      "name": "Case 1.2",
+      "points": 1,
+      "stdin": "2\n2\n1\n3\n",
+      "outputLine": {
+        "number": -1,
+        "text": "Final battery: 45"
+      }
+    },
+    {
+      "name": "Case 2.1",
+      "points": 1,
+      "stdin": "1\n1\n1\n1\n",
+      "labelledLines": {
+        "prefix": "Battery: ",
+        "lines": [
+          "Battery: 50",
+          "Battery: 35",
+          "Battery: 20",
+          "Battery: 5",
+          "Battery: -10"
+        ]
+      }
+    },
+    {
+      "name": "Case 2.2",
+      "points": 1,
+      "stdin": "1\n1\n1\n1\n",
+      "outputLine": {
+        "number": -1,
+        "text": "The rover is out of power."
+      }
+    },
+    {
+      "name": "Case 3.1",
+      "points": 1,
+      "stdin": "4\n-1\n2\n3\n",
+      "labelledLines": {
+        "prefix": "Battery: ",
+        "lines": [
+          "Battery: 50",
+          "Battery: 45",
+          "Battery: 40",
+          "Battery: 50"
+        ]
+      }
+    },
+    {
+      "name": "Case 3.2",
+      "points": 1,
+      "stdin": "4\n-1\n2\n3\n",
+      "outputLine": {
+        "number": -1,
+        "text": "Final battery: 50"
+      }
+    },
+    {
+      "name": "Case 4.1",
+      "points": 1,
+      "stdin": "3\n",
+      "labelledLines": {
+        "prefix": "Battery: ",
+        "lines": [
+          "Battery: 50"
+        ]
+      }
+    },
+    {
+      "name": "Case 4.2",
+      "points": 1,
+      "stdin": "3\n",
+      "outputLine": {
+        "number": -1,
+        "text": "Final battery: 50"
+      }
+    },
+    {
+      "name": "Case 5.1",
+      "points": 1,
+      "stdin": "1\n1\n1\n9\n",
+      "labelledLines": {
+        "prefix": "Battery: ",
+        "lines": [
+          "Battery: 50",
+          "Battery: 35",
+          "Battery: 20",
+          "Battery: 5",
+          "Battery: 0"
+        ]
+      }
+    },
+    {
+      "name": "Case 5.2",
+      "points": 2,
+      "stdin": "1\n1\n1\n9\n",
+      "outputLine": {
+        "number": -1,
+        "text": "The rover is out of power."
+      }
+    }
+  ]
+}

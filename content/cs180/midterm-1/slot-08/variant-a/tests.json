@@ -1,0 +1,125 @@
+{
+  "kind": "stdio",
+  "timeLimitMs": 5000,
+  "cases": [
+    {
+      "name": "Sample run from the handout: the Row total lines, in order",
+      "points": 1,
+      "sample": true,
+      "stdin": "2\n3\n4 -1 6\n0 7 3\n",
+      "labelledLines": {
+        "prefix": "Row ",
+        "lines": [
+          "Row 0 total: 9",
+          "Row 1 total: 10"
+        ]
+      }
+    },
+    {
+      "name": "Sample run from the handout: the Largest line",
+      "points": 2,
+      "sample": true,
+      "stdin": "2\n3\n4 -1 6\n0 7 3\n",
+      "labelledLines": {
+        "prefix": "Largest: ",
+        "lines": [
+          "Largest: 7 at row 1, column 1"
+        ]
+      }
+    },
+    {
+      "name": "Case 1.1",
+      "points": 1,
+      "stdin": "2\n2\n-4 6\n6 -9\n",
+      "labelledLines": {
+        "prefix": "Row ",
+        "lines": [
+          "Row 0 total: 2",
+          "Row 1 total: -3"
+        ]
+      }
+    },
+    {
+      "name": "Case 1.2",
+      "points": 2,
+      "stdin": "2\n2\n-4 6\n6 -9\n",
+      "labelledLines": {
+        "prefix": "Largest: ",
+        "lines": [
+          "Largest: 6 at row 0, column 1"
+        ]
+      }
+    },
+    {
+      "name": "Case 2.1",
+      "points": 1,
+      "stdin": "1\n4\n3 9 9 1\n",
+      "labelledLines": {
+        "prefix": "Row ",
+        "lines": [
+          "Row 0 total: 22"
+        ]
+      }
+    },
+    {
+      "name": "Case 2.2",
+      "points": 1,
+      "stdin": "1\n4\n3 9 9 1\n",
+      "labelledLines": {
+        "prefix": "Largest: ",
+        "lines": [
+          "Largest: 9 at row 0, column 1"
+        ]
+      }
+    },
+    {
+      "name": "Case 3.1",
+      "points": 1,
+      "stdin": "4\n1\n2\n-1\n8\n8\n",
+      "labelledLines": {
+        "prefix": "Row ",
+        "lines": [
+          "Row 0 total: 2",
+          "Row 1 total: -1",
+          "Row 2 total: 8",
+          "Row 3 total: 8"
+        ]
+      }
+    },
+    {
+      "name": "Case 3.2",
+      "points": 1,
+      "stdin": "4\n1\n2\n-1\n8\n8\n",
+      "labelledLines": {
+        "prefix": "Largest: ",
+        "lines": [
+          "Largest: 8 at row 2, column 0"
+        ]
+      }
+    },
+    {
+      "name": "Case 4.1",
+      "points": 1,
+      "stdin": "3\n3\n1 2 3\n4 5 6\n7 8 10\n",
+      "labelledLines": {
+        "prefix": "Row ",
+        "lines": [
+          "Row 0 total: 6",
+          "Row 1 total: 15",
+          "Row 2 total: 25"
+        ]
+      }
+    },
+    {
+      "name": "Case 4.2",
+      "points": 1,
+      "stdin": "3\n3\n1 2 3\n4 5 6\n7 8 10\n",
+      "labelledLines": {
+        "prefix": "Largest: ",
+        "lines": [
+          "Largest: 10 at row 2, column 2"
+        ]
+      }
+    }
+  ]
+}

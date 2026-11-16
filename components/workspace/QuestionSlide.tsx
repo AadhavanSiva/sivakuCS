@@ -7,7 +7,7 @@ import { Testcases } from "@/components/Testcases";
 import type { ApiMember } from "@/lib/autocomplete/reference-api";
 import type { Checkpoint } from "@/lib/attempt-storage";
 import { filesToCompile, gradeQuestion } from "@/lib/grading/grade";
-import type { Question } from "@/lib/grading/types";
+import type { GradeResult, Question } from "@/lib/grading/types";
 import { getJava, preloadJava, useJavaRuntime } from "@/lib/java-runtime";
 import type { JavaFiles } from "@/lib/java/programs";
 import { JavaEditor } from "./JavaEditor";
@@ -28,6 +28,8 @@ type Props = {
   /** The student's editable files; missing ones are taken from the starter. */
   studentFiles: JavaFiles;
   checkpoint: Checkpoint | undefined;
+  /** After Submit: this question's submitted results, shown in Feedback instead of the last Test's. */
+  submitted?: { result: GradeResult; at: number };
   /** Whether the last Test's checkpoint reached the account (this visit only). */
   checkpointSync?: CheckpointSync;
   saveStatus: SaveStatus;
@@ -44,7 +46,7 @@ type Props = {
  * bar, and the console with Run and Test.
  */
 export function QuestionSlide(props: Props) {
-  const { attemptId, question, number, referenceHtml, referenceApi, studentFiles, checkpoint, checkpointSync, saveStatus, lockReason, onEdit, onSaveNow, onTested } = props;
+  const { attemptId, question, number, referenceHtml, referenceApi, studentFiles, checkpoint, submitted, checkpointSync, saveStatus, lockReason, onEdit, onSaveNow, onTested } = props;
   const locked = lockReason !== undefined;
   const { meta } = question;
   const tabs = [...meta.editable, ...meta.readOnly];
@@ -57,6 +59,26 @@ export function QuestionSlide(props: Props) {
   const runConsole = useRef<RunConsoleHandle>(null);
   const feedback = useRef<HTMLElement>(null);
   const { status } = useJavaRuntime();
+
+  // After Test, and on opening a submitted question, scroll the left pane
+  // to the results once they are on screen.
+  const shownAt = (submitted ?? checkpoint)?.at;
+  const revealResults = useRef(false);
+  const revealedSubmitted = useRef(false);
+  useEffect(() => {
+    // The attempt may load after this slide mounts, so watch for the submission
+    // to appear, and jump straight there: a smooth scroll can be cut short
+    // while the editor is still laying out.
+    let behavior: ScrollBehavior = "smooth";
+    if (submitted && !revealedSubmitted.current) {
+      revealedSubmitted.current = true;
+      revealResults.current = true;
+      behavior = "instant";
+    }
+    if (testing || !revealResults.current || shownAt === undefined) return;
+    revealResults.current = false;
+    requestAnimationFrame(() => feedback.current?.scrollIntoView({ behavior, block: "start" }));
+  }, [testing, shownAt, submitted]);
 
   // Reached directly (a refresh mid-attempt): Java may not have started yet.
   useEffect(preloadJava, []);
@@ -80,6 +102,7 @@ export function QuestionSlide(props: Props) {
     setFeedbackOpen(true);
     setTesting(true);
     setTestError(null);
+    revealResults.current = true;
     // Bring the results into view; the description may be long.
     requestAnimationFrame(() => feedback.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
     try {
@@ -114,7 +137,15 @@ export function QuestionSlide(props: Props) {
         >
           {testing && <p className="text-sm text-neutral-400">Running the tests…</p>}
           {!testing && testError && <p className="text-sm text-rose-400">{testError}</p>}
-          {!testing && !testError && checkpoint && (
+          {submitted && (
+            <>
+              <Testcases result={submitted.result} />
+              <p data-testid="submitted-status" className="mt-2 text-xs text-neutral-500">
+                Submitted {new Date(submitted.at).toLocaleTimeString()}.
+              </p>
+            </>
+          )}
+          {!submitted && !testing && !testError && checkpoint && (
             <>
               <Testcases result={checkpoint.result} />
               <p data-testid="checkpoint-status" className="mt-2 text-xs text-neutral-500">
@@ -125,7 +156,7 @@ export function QuestionSlide(props: Props) {
               </p>
             </>
           )}
-          {!testing && !testError && !checkpoint && (
+          {!submitted && !testing && !testError && !checkpoint && (
             <p className="text-sm text-neutral-500">Press Test to run the tests for question {number}. Results appear here.</p>
           )}
         </Collapsible>

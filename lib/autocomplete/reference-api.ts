@@ -6,7 +6,9 @@
 //   `s.trim()`                   an instance method; s's type comes from the
 //                                sheet's receivers comment (below)
 //   `new File(name).exists()`    a constructor, then an instance method
-// and whose second column says what it does (the completion's documentation).
+// and whose last column says what it does (the completion's documentation).
+// With three columns, as on Ed's sheets, the middle one is the return type,
+// which lets chained calls (`s.trim().`) complete.
 //
 // Instance calls name their receiver with a variable, so the sheet says
 // what each receiver is, in a comment that is not shown:
@@ -182,9 +184,16 @@ export function parseReferenceSheet(markdown: string): ApiMember[] {
     if (!line.trim().startsWith("|") || /^\|\s*[-:| ]+\|?\s*$/.test(line.trim())) continue;
     const cells = line.split("|").slice(1, -1);
     if (cells.length < 2) continue;
-    const doc = plain(cells.slice(1).join("|"));
+    // Two columns (code, what it does), or Ed's three (code, returns, what it does).
+    const returnsCell = cells.length >= 3 ? plain(cells[1]) : "";
+    const returns = /^[A-Za-z_$][\w$.]*(\[\])*$/.test(returnsCell) && returnsCell !== "void" ? returnsCell : undefined;
+    const doc = plain(cells.slice(cells.length >= 3 ? 2 : 1).join("|"));
     for (const span of cells[0].matchAll(/`([^`]+)`/g)) {
-      for (const member of membersOf(span[1], doc, receivers)) {
+      const described = membersOf(span[1], doc, receivers);
+      // The returns column is about the call the row ends with.
+      const last = described[described.length - 1];
+      if (returns && last && last.kind !== "constructor") last.returns = returns;
+      for (const member of described) {
         const key = `${member.owner}.${member.kind}.${member.name}(${member.params.join(",")})`;
         if (seen.has(key)) continue;
         seen.add(key);

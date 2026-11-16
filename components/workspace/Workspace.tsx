@@ -263,6 +263,9 @@ export function Workspace({ exam, userId }: { exam: Exam; userId: string }) {
             referenceApi={exam.referenceApi ?? []}
             studentFiles={filesOf(question.id)}
             checkpoint={attempt.checkpoints[question.id]}
+            submitted={
+              submission?.results[question.id] ? { result: submission.results[question.id], at: submission.at } : undefined
+            }
             checkpointSync={checkpointSync[question.id]}
             saveStatus={saveStatus}
             lockReason={lockReason}

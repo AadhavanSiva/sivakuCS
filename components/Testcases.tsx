@@ -6,8 +6,9 @@ import type { CaseResult, GradeResult } from "@/lib/grading/types";
 
 /**
  * Test results, as on the real exam: "TESTCASES 3 / 14 passed, 2 points",
- * then one row per case (name, ✓ or ✗, points). A failed sample case opens
- * to show why; hidden cases show only pass or fail.
+ * then one row per case (name, ✓ or ✗, points). Every row opens: a failed
+ * sample case shows why; any other case shows only "Passed." or
+ * "Failed: Case 1: did not pass."
  */
 export function Testcases({ result }: { result: GradeResult }) {
   return (
@@ -33,7 +34,8 @@ export function Testcases({ result }: { result: GradeResult }) {
 }
 
 function CaseRow({ testCase }: { testCase: CaseResult }) {
-  // Only a failed sample case says why.
+  // Every row opens. Only a failed sample case says why; a failed hidden
+  // case says only that it did not pass.
   const explained = testCase.sample && !testCase.passed && Boolean(testCase.reason);
   const [open, setOpen] = useState(false);
   const earned = testCase.passed ? testCase.points : 0;
@@ -41,11 +43,9 @@ function CaseRow({ testCase }: { testCase: CaseResult }) {
   const row = (
     <>
       <span className="min-w-0 flex-1 truncate" title={testCase.name}>
-        {explained && (
-          <span aria-hidden="true" className="mr-1 inline-block w-3 text-neutral-500">
-            {open ? "▾" : "▸"}
-          </span>
-        )}
+        <span aria-hidden="true" className="mr-1 inline-block w-3 text-neutral-500">
+          {open ? "▾" : "▸"}
+        </span>
         {testCase.name}
       </span>
       <span
@@ -68,20 +68,16 @@ function CaseRow({ testCase }: { testCase: CaseResult }) {
       data-sample={testCase.sample}
       className="flex flex-col"
     >
-      {explained ? (
-        <button
-          type="button"
-          data-testid="testcase-toggle"
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-          className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-white/5"
-        >
-          {row}
-        </button>
-      ) : (
-        <div className="flex items-center gap-2 px-2.5 py-1.5">{row}</div>
-      )}
-      {explained && open && (
+      <button
+        type="button"
+        data-testid="testcase-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-white/5"
+      >
+        {row}
+      </button>
+      {open && explained && (
         <div className="flex flex-col gap-2 px-2.5 pb-2.5 pl-6">
           <p data-testid="sample-reason" className="whitespace-pre-wrap font-mono text-[12px] text-neutral-200">
             Failed: {testCase.reason}
@@ -93,6 +89,11 @@ function CaseRow({ testCase }: { testCase: CaseResult }) {
             </div>
           )}
         </div>
+      )}
+      {open && !explained && (
+        <p data-testid="testcase-detail" className="px-2.5 pb-2.5 pl-6 font-mono text-[12px] text-neutral-200">
+          {testCase.passed ? "Passed." : `Failed: ${testCase.name}: did not pass.`}
+        </p>
       )}
     </li>
   );

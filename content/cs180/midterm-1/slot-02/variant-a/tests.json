@@ -1,0 +1,74 @@
+{
+  "kind": "stdio",
+  "timeLimitMs": 5000,
+  "cases": [
+    {
+      "name": "Sample run from the handout: the Total visitors line",
+      "points": 1,
+      "sample": true,
+      "stdin": "148\n162\n",
+      "labelledLines": {
+        "prefix": "Total visitors: ",
+        "lines": [
+          "Total visitors: 310"
+        ]
+      }
+    },
+    {
+      "name": "Sample run from the handout: the Average per day line",
+      "points": 1,
+      "sample": true,
+      "stdin": "148\n162\n",
+      "labelledLines": {
+        "prefix": "Average per day: ",
+        "lines": [
+          "Average per day: 155.00"
+        ]
+      }
+    },
+    {
+      "name": "Case 1.1",
+      "points": 1,
+      "stdin": "7\n8\n",
+      "labelledLines": {
+        "prefix": "Total visitors: ",
+        "lines": [
+          "Total visitors: 15"
+        ]
+      }
+    },
+    {
+      "name": "Case 1.2",
+      "points": 2,
+      "stdin": "7\n8\n",
+      "labelledLines": {
+        "prefix": "Average per day: ",
+        "lines": [
+          "Average per day: 7.50"
+        ]
+      }
+    },
+    {
+      "name": "Case 2.1",
+      "points": 1,
+      "stdin": "1001\n0\n",
+      "labelledLines": {
+        "prefix": "Total visitors: ",
+        "lines": [
+          "Total visitors: 1001"
+        ]
+      }
+    },
+    {
+      "name": "Case 2.2",
+      "points": 1,
+      "stdin": "1001\n0\n",
+      "labelledLines": {
+        "prefix": "Average per day: ",
+        "lines": [
+          "Average per day: 500.50"
+        ]
+      }
+    }
+  ]
+}

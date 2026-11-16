@@ -1,0 +1,96 @@
+{
+  "kind": "stdio",
+  "timeLimitMs": 5000,
+  "cases": [
+    {
+      "name": "Sample run from the handout: the Stop number line",
+      "points": 1,
+      "sample": true,
+      "stdin": "Ferndale\n",
+      "labelledLines": {
+        "prefix": "Stop number: ",
+        "lines": [
+          "Stop number: 3"
+        ]
+      }
+    },
+    {
+      "name": "Sample run from the handout: the Fare zone line",
+      "points": 1,
+      "sample": true,
+      "stdin": "Ferndale\n",
+      "labelledLines": {
+        "prefix": "Fare zone: ",
+        "lines": [
+          "Fare zone: inner"
+        ]
+      }
+    },
+    {
+      "name": "Case 1.1",
+      "points": 2,
+      "stdin": "copper hill\n",
+      "labelledLines": {
+        "prefix": "Stop number: ",
+        "lines": [
+          "Stop number: 4"
+        ]
+      }
+    },
+    {
+      "name": "Case 1.2",
+      "points": 1,
+      "stdin": "copper hill\n",
+      "labelledLines": {
+        "prefix": "Fare zone: ",
+        "lines": [
+          "Fare zone: middle"
+        ]
+      }
+    },
+    {
+      "name": "Case 2.1",
+      "points": 1,
+      "stdin": "rEDCLIFF\n",
+      "labelledLines": {
+        "prefix": "Stop number: ",
+        "lines": [
+          "Stop number: 7"
+        ]
+      }
+    },
+    {
+      "name": "Case 2.2",
+      "points": 1,
+      "stdin": "rEDCLIFF\n",
+      "labelledLines": {
+        "prefix": "Fare zone: ",
+        "lines": [
+          "Fare zone: outer"
+        ]
+      }
+    },
+    {
+      "name": "Case 3.1",
+      "points": 1,
+      "stdin": "Mill\n",
+      "labelledLines": {
+        "prefix": "Stop number: ",
+        "lines": [
+          "Stop number: unknown"
+        ]
+      }
+    },
+    {
+      "name": "Case 3.2",
+      "points": 1,
+      "stdin": "Mill\n",
+      "labelledLines": {
+        "prefix": "Fare zone: ",
+        "lines": [
+          "Fare zone: unknown"
+        ]
+      }
+    }
+  ]
+}

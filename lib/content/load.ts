@@ -6,6 +6,7 @@
 //   content/<course>/<exam>/exam.json        title, minutes, instructions
 //   content/<course>/<exam>/reference.md     reference sheet for the whole exam
 //   content/<course>/<exam>/<nn-slug>/       one question; see lib/grading/types.ts
+//   content/<course>/<exam>/slot-NN/variant-a/  or one question of a bank (questionDirs)
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import type { JavaFiles } from "../java/programs";
@@ -39,12 +40,31 @@ export function readFiles(dir: string): JavaFiles {
   return files;
 }
 
-/** Question folders in an exam, in order: those named like "01-something". */
-export function questionDirs(examDir: string): string[] {
-  return readdirSync(examDir)
-    .filter((name) => /^\d{2}-[a-z0-9-]+$/.test(name) && statSync(join(examDir, name)).isDirectory())
-    .sort()
-    .map((name) => join(examDir, name));
+const subdirs = (dir: string, pattern: RegExp) =>
+  readdirSync(dir)
+    .filter((name) => pattern.test(name) && statSync(join(dir, name)).isDirectory())
+    .sort();
+
+/** The variants of a slot folder, in order: "variant-a", "variant-b", ... */
+export function variantDirs(slotDir: string): string[] {
+  return subdirs(slotDir, /^variant-[a-z0-9-]+$/).map((name) => join(slotDir, name));
+}
+
+/**
+ * Question folders in an exam, in order. A folder named like "01-something"
+ * is one question. A folder named like "slot-01" is one question of the exam
+ * with interchangeable variants in "variant-a", "variant-b", ... (a question
+ * bank); the exam serves its first variant. With `allVariants`, every variant
+ * of every slot, for npm run verify.
+ */
+export function questionDirs(examDir: string, { allVariants = false } = {}): string[] {
+  return subdirs(examDir, /^(\d{2}-[a-z0-9-]+|slot-\d{2})$/).flatMap((name) => {
+    const dir = join(examDir, name);
+    if (!name.startsWith("slot-")) return [dir];
+    const variants = variantDirs(dir);
+    if (variants.length === 0) throw new Error(`${dir}: a slot needs at least one folder named like variant-a`);
+    return allVariants ? variants : [variants[0]];
+  });
 }
 
 /** Exam folders: content/<course>/<exam> containing an exam.json. */
@@ -71,6 +91,13 @@ export function loadQuestion(dir: string, root = CONTENT_ROOT): Question {
     starter: readFiles(join(dir, "starter")),
     given: readFiles(join(dir, "given")),
     harness: readFiles(join(dir, "harness")),
+    helpers: readFiles(join(dir, "helpers")),
+    alternates: Object.fromEntries(
+      (existsSync(join(dir, "alternates")) ? subdirs(join(dir, "alternates"), /^[a-z0-9-]+$/) : []).map((name) => [
+        name,
+        readFiles(join(dir, "alternates", name)),
+      ]),
+    ),
     tests: readJson<TestsFile>(join(dir, "tests.json")),
   };
 }

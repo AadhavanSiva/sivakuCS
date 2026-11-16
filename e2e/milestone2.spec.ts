@@ -6,6 +6,7 @@ import { expect, test } from "@playwright/test";
 import { join } from "node:path";
 import {
   CONTENT_ROOT,
+  examDirs,
   loadBrokenVariants,
   loadExam,
   loadSolution,
@@ -55,6 +56,32 @@ test("the browser grades every sample variant exactly as the local JDK does", as
   }
 });
 
+// The midterms are too big to grade every broken variant in the browser
+// too; their reference solutions cover what they add (helpers/, labelled
+// lines, the last line), and verify covers the broken variants.
+test("the browser grades every exam's reference solutions exactly as the local JDK does", async ({ page }) => {
+  test.setTimeout(15 * 60_000);
+  const local = new LocalJava();
+  await page.goto("/lab/grade");
+  await expect(page.getByTestId("status")).toHaveAttribute("data-status", "ready", { timeout: JVM_START_TIMEOUT });
+
+  try {
+    for (const examDir of examDirs()) {
+      const exam = loadExam(examDir);
+      const dirs = questionDirs(examDir);
+      for (const [i, question] of exam.questions.entries()) {
+        const files = loadSolution(dirs[i]);
+        const expected = await gradeQuestion(local, question, files);
+        const actual = await page.evaluate(([q, f]) => window.sivakuGrade!(q, f), [question, files] as const);
+        expect(summary(actual), question.id).toEqual(summary(expected));
+        expect(actual.passed, `${question.id} solution passes everything`).toBe(actual.total);
+      }
+    }
+  } finally {
+    await local.close();
+  }
+});
+
 test("Test shows the header, the sample's reason, and only pass or fail for hidden cases", async ({ page }) => {
   await page.goto("/lab/grade");
   await expect(page.getByTestId("status")).toHaveAttribute("data-status", "ready", { timeout: JVM_START_TIMEOUT });
@@ -64,15 +91,20 @@ test("Test shows the header, the sample's reason, and only pass or fail for hidd
   await page.getByRole("button", { name: "Playlist (harness)" }).click();
   await page.getByTestId("test").click();
   await expect(page.getByTestId("testcases-header")).toHaveText("TESTCASES   2 / 7 passed, 2 points", { timeout: 120_000 });
-  // Collapsed until opened; only the failed sample row can be.
+  // Collapsed until opened; every row opens, and only the failed sample says why.
   await expect(page.getByTestId("sample-reason")).toHaveCount(0);
-  await expect(page.getByTestId("testcase-toggle")).toHaveCount(1);
-  await page.getByTestId("testcase-toggle").click();
+  await expect(page.getByTestId("testcase-toggle")).toHaveCount(7);
+  await page.locator('[data-name="Sample from the handout"]').getByTestId("testcase-toggle").click();
   await expect(page.getByTestId("sample-reason")).toHaveText(
     "Failed: total of the sample songs ==> expected: <345> but was: <0>",
   );
   const hidden = page.locator('[data-testid="testcase"]:not([data-name="Sample from the handout"])');
   await expect(hidden).toHaveCount(6);
+  for (const row of await hidden.all()) await row.getByTestId("testcase-toggle").click();
+  const failedHidden = hidden.and(page.locator('[data-passed="false"]')).first();
+  const failedName = await failedHidden.getAttribute("data-name");
+  await expect(failedHidden.getByTestId("testcase-detail")).toHaveText(`Failed: ${failedName}: did not pass.`);
+  await expect(hidden.and(page.locator('[data-passed="true"]')).first().getByTestId("testcase-detail")).toHaveText("Passed.");
   await expect(page.getByTestId("sample-reason")).toHaveCount(1);
 
   // Code that does not compile scores 0 and shows the compiler's message.

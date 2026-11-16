@@ -6,7 +6,7 @@ export type TestKind = "stdio" | "files" | "harness";
 /** meta.json */
 export type QuestionMeta = {
   title: string;
-  /** Sum of the case points; 5 to 13 per question, 100 per exam. */
+  /** Sum of the case points; 4 to 16 per question (the midterms' range), 100 per exam. */
   points: number;
   /** Files the student edits; their starting text is in starter/. */
   editable: string[];
@@ -36,16 +36,33 @@ export type TestCase = {
   stdout?: string;
   /**
    * stdio and files: one line of the output instead of all of it, for one
-   * test per line (Ed's Midterm 1 pattern). number counts from 1.
+   * test per line (Ed's Midterm 1 pattern). number counts from 1; a
+   * negative number counts from the end, so -1 is the last line.
    */
   outputLine?: { number: number; text: string };
+  /**
+   * stdio and files: the lines of the output that start with `prefix`, in
+   * order, must be exactly `lines`; other lines are ignored. For output
+   * whose surrounding lines are up to the student (a menu's wording). A list
+   * checks several labels in one case; all must match.
+   */
+  labelledLines?: LabelledLines | LabelledLines[];
   /** files: placed in the working directory before the run. Leave out for none. */
   inputFiles?: JavaFiles;
   /** files: expected contents after the run; null means the file must not exist. */
   outputFiles?: Record<string, string | null>;
   /** harness: the public static no-argument method of the harness class to call. */
   call?: string;
+  /**
+   * The name of a folder in alternates/: for this case the student's code is
+   * compiled again with those versions of the given files, such as a parent
+   * class written differently, to show the student's subclass calls super.
+   */
+  against?: string;
 };
+
+/** The lines of the output that start with `prefix`, in order. */
+export type LabelledLines = { prefix: string; lines: string[] };
 
 /** tests.json */
 export type TestsFile = {
@@ -68,6 +85,14 @@ export type Question = {
   given: JavaFiles;
   /** Hidden harness sources; empty unless tests.kind is "harness". */
   harness: JavaFiles;
+  /**
+   * helpers/: classes compiled with the student's code for Run and Test
+   * but never shown as tabs, like a pre-compiled helper the student uses
+   * only through its documented methods.
+   */
+  helpers?: JavaFiles;
+  /** alternates/<name>/: other versions of given files, for cases with `against`. */
+  alternates?: Record<string, JavaFiles>;
   tests: TestsFile;
 };
 

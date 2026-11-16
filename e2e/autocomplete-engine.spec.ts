@@ -136,11 +136,23 @@ test.describe("completing after a dot", () => {
     expect(labels('Song song = new Song("a", 1);\nsong.', files)).toEqual(["getSeconds", "getTitle"]);
   });
 
-  test("method suggestions insert a call with parameter placeholders", () => {
+  test("suggestions insert only the name; the parameters are shown, not inserted", () => {
     const [parseInt] = completeAt("Integer.", context())!;
-    expect(parseInt.insertText).toBe("parseInt(${1:s})");
-    expect(parseInt.snippet).toBe(true);
+    expect(parseInt.insertText).toBe("parseInt");
+    expect(parseInt.params).toBe("(s)");
     expect(parseInt.detail).toBe("Integer.parseInt(s)");
+    const files = { "Song.java": given("Song.java"), "Track.java": given("Track.java") };
+    const everywhere = [
+      "Integer.", "Double.", "IO.", "String.", "Math.", "String s = IO.readln();\ns.", 'String[] w = IO.readln().split(" ");\nw.',
+      "BufferedReader reader = null;\nreader.", "PrintWriter writer = null;\nwriter.", "Song song = null;\nsong.", "PrintWriter w = new ",
+    ].flatMap((text) => completeAt(text, context(files)) ?? []);
+    expect(everywhere.length).toBeGreaterThan(20);
+    for (const s of everywhere) {
+      expect(s.insertText, `${s.detail} inserts only its name`).toBe(s.label);
+      expect(s.insertText).not.toMatch(/[(${]/);
+    }
+    const [title] = completeAt("Song s = null; s.", context(files))!.filter((x) => x.label === "getTitle");
+    expect(title.params).toBe("()");
     // By type, whatever the sheet calls its receiver.
     const [equalsIgnoreCase] = completeAt("String line = IO.readln();\nline.", context())!.filter((x) => x.label === "equalsIgnoreCase");
     expect(equalsIgnoreCase.detail).toBe("String.equalsIgnoreCase(t)");

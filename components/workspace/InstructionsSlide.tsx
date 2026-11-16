@@ -26,6 +26,8 @@ export function InstructionsSlide({ exam, timer, submitted, onStart, onNewAttemp
 
   const questions = exam.questions.length;
   const points = exam.questions.reduce((sum, q) => sum + q.meta.points, 0);
+  // Ed's Midterm 1 pattern gives the sample run's tests points; other exams make the sample worth 0.
+  const samplesScore = exam.questions.some((q) => q.tests.cases.some((c) => c.sample && c.points > 0));
   const javaReady = status !== "idle" && status !== "starting" && status !== "failed";
 
   return (
@@ -71,12 +73,19 @@ export function InstructionsSlide({ exam, timer, submitted, onStart, onNewAttemp
           <h2>How scoring works</h2>
           <ul>
             <li>
-              Each question is worth the points shown beside it, earned from hidden test cases, usually 1 point each.
+              Each question is worth the points shown beside it, earned from its test cases, usually 1 point each.
             </li>
-            <li>
-              The first test, <em>Sample from the handout</em>, is worth 0 points. If it fails, it tells you why. Hidden
-              cases show only whether they passed.
-            </li>
+            {samplesScore ? (
+              <li>
+                The tests from the handout&apos;s sample run count toward your score too. If one fails, it tells you
+                why. Hidden cases show only whether they passed.
+              </li>
+            ) : (
+              <li>
+                The first test, <em>Sample from the handout</em>, is worth 0 points. If it fails, it tells you why.
+                Hidden cases show only whether they passed.
+              </li>
+            )}
             <li>Code that does not compile scores 0 for that question.</li>
             <li>
               <strong>Test</strong> runs all the tests for the question and saves a checkpoint of your code.{" "}

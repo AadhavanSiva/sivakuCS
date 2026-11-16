@@ -52,10 +52,11 @@ export function registerJavaCompletions(monaco: Monaco): void {
       };
       return {
         suggestions: suggestions.map((s) => ({
-          label: s.label,
+          // The parameters show after the name in the dropdown; only the name is inserted.
+          label: { label: s.label, detail: s.params || undefined, description: s.detail },
+          filterText: s.label,
           kind: kinds[s.kind],
           insertText: s.insertText,
-          insertTextRules: s.snippet ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet : undefined,
           detail: s.detail,
           documentation: s.documentation,
           sortText: s.sortText,

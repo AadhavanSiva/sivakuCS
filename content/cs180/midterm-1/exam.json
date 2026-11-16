@@ -1,0 +1,5 @@
+{
+  "title": "Midterm 1",
+  "minutes": 60,
+  "instructions": "Ten questions. Each one is a whole program in `Main.java`, graded on what it prints.\n\nPrint prompts and results exactly as the question and its sample run show them. In a sample run, what the user types is shown in [brackets].\n\nThe reference sheet below each question lists the methods you may use."
+}

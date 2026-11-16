@@ -18,12 +18,12 @@ import type { CaseResult, GradeResult, Question, TestCase } from "./types";
 const normalize = (text: string) => text.replace(/\r\n?/g, "\n");
 
 /**
- * The files to compile: the question's read-only files plus the student's
- * versions of the editable ones (starter text for any the student lacks).
- * Anything else the student sends is ignored.
+ * The files to compile: the question's hidden helpers and read-only files
+ * plus the student's versions of the editable ones (starter text for any
+ * the student lacks). Anything else the student sends is ignored.
  */
 export function filesToCompile(question: Question, studentFiles: JavaFiles): JavaFiles {
-  const files: JavaFiles = { ...question.given };
+  const files: JavaFiles = { ...question.helpers, ...question.given };
   for (const name of question.meta.editable) {
     files[name] = studentFiles[name] ?? question.starter[name] ?? "";
   }
@@ -35,7 +35,7 @@ export async function gradeQuestion(
   question: Question,
   studentFiles: JavaFiles,
 ): Promise<GradeResult> {
-  const { cases, kind } = question.tests;
+  const { cases } = question.tests;
   const maxScore = cases.reduce((sum, c) => sum + c.points, 0);
   const result = (caseResults: CaseResult[], extra: Partial<GradeResult> = {}): GradeResult => ({
     compiled: true,
@@ -55,37 +55,59 @@ export async function gradeQuestion(
     return result(failAll("Your code does not compile."), { compiled: false, compileOutput: compile.output, score: 0 });
   }
 
-  const dirs = sandboxDirs(java.paths);
-  let classPath = dirs.classes;
-  if (kind === "harness") {
-    // The hidden tests are compiled against the student's classes: a
-    // renamed method or a changed signature fails the tests, not the build.
-    await writeFiles(java, dirs.harnessSrc, question.harness);
-    await java.call("reset", [dirs.harnessClasses]);
-    const sep = java.paths.pathSeparator;
-    const harness = JSON.parse(
-      (await java.call("compileWith", [dirs.harnessSrc, dirs.harnessClasses, `${dirs.classes}${sep}${java.paths.sandboxJar}`], {
-        activity: "compiling",
-      }))!,
-    );
-    if (!harness.ok) {
-      return result(failAll(`The tests could not use your code:\n${harness.output}`));
-    }
-    classPath = `${dirs.classes}${sep}${dirs.harnessClasses}`;
-  }
-
+  // Cases run in groups: first those against the given files, then, for
+  // each alternate set a case names, the student's code compiled again
+  // against those versions of the given files (a parent class written
+  // differently, to show the student's subclass calls super).
   const timeLimitMs = question.tests.timeLimitMs ?? DEFAULT_TIME_LIMIT_MS;
-  const runs: RunCache = new Map();
-  const results: CaseResult[] = [];
-  for (const [i, testCase] of cases.entries()) {
-    try {
-      results.push(await runCase(java, question, testCase, i, classPath, timeLimitMs, runs));
-    } catch (error) {
-      if (error instanceof JavaStoppedError) throw error;
-      results.push(caseResult(testCase, i, false, { reason: failureReason(error, timeLimitMs) }));
+  const results: CaseResult[] = new Array(cases.length);
+  const sets = [undefined, ...new Set(cases.map((c) => c.against).filter((s): s is string => Boolean(s)))];
+  for (const set of sets) {
+    const group = [...cases.entries()].filter(([, c]) => c.against === set);
+    if (set !== undefined) {
+      const replaced = { ...filesToCompile(question, studentFiles), ...(question.alternates?.[set] ?? {}) };
+      const again = await compileFiles(java, replaced);
+      if (!again.ok) {
+        for (const [i, c] of group) results[i] = caseResult(c, i, false, { reason: "Your code does not compile against other versions of the given classes." });
+        continue;
+      }
+    }
+    const classPath = await prepareHarness(java, question);
+    if (typeof classPath !== "string") {
+      for (const [i, c] of group) results[i] = caseResult(c, i, false, { reason: classPath.failed });
+      continue;
+    }
+    const runs: RunCache = new Map();
+    for (const [i, testCase] of group) {
+      try {
+        results[i] = await runCase(java, question, testCase, i, classPath, timeLimitMs, runs);
+      } catch (error) {
+        if (error instanceof JavaStoppedError) throw error;
+        results[i] = caseResult(testCase, i, false, { reason: failureReason(error, timeLimitMs) });
+      }
     }
   }
   return result(results);
+}
+
+/**
+ * The class path to run with: the compiled classes, plus for harness
+ * questions the hidden tests compiled against them, so a renamed method or
+ * a changed signature fails the tests, not the build.
+ */
+async function prepareHarness(java: JavaBackend, question: Question): Promise<string | { failed: string }> {
+  const dirs = sandboxDirs(java.paths);
+  if (question.tests.kind !== "harness") return dirs.classes;
+  await writeFiles(java, dirs.harnessSrc, question.harness);
+  await java.call("reset", [dirs.harnessClasses]);
+  const sep = java.paths.pathSeparator;
+  const harness = JSON.parse(
+    (await java.call("compileWith", [dirs.harnessSrc, dirs.harnessClasses, `${dirs.classes}${sep}${java.paths.sandboxJar}`], {
+      activity: "compiling",
+    }))!,
+  );
+  if (!harness.ok) return { failed: `The tests could not use your code:\n${harness.output}` };
+  return `${dirs.classes}${sep}${dirs.harnessClasses}`;
 }
 
 function failureReason(error: unknown, timeLimitMs: number): string {
@@ -190,11 +212,32 @@ async function runCase(
 
   if (testCase.outputLine) {
     const { number, text } = testCase.outputLine;
-    const actual = outputLines(run.stdout)[number - 1];
+    const lines = outputLines(run.stdout);
+    const actual = number > 0 ? lines[number - 1] : lines[lines.length + number];
     if (actual !== text) {
-      const was = actual === undefined ? `no line ${number}` : actual;
+      const which = number > 0 ? `line ${number}` : number === -1 ? "the last line" : `line ${-number} from the end`;
+      const was = actual === undefined ? `no ${which}` : actual;
       return caseResult(testCase, index, false, {
-        reason: crash ?? `line ${number} ==> expected: <${text}> but was: <${was}>`,
+        reason: crash ?? `${which} ==> expected: <${text}> but was: <${was}>`,
+      });
+    }
+  }
+
+  const labelled = testCase.labelledLines;
+  for (const { prefix, lines: expected } of Array.isArray(labelled) ? labelled : labelled ? [labelled] : []) {
+    const actual = outputLines(run.stdout).filter((line) => line.startsWith(prefix));
+    const at = expected.findIndex((line, i) => actual[i] !== line);
+    const mismatch = at !== -1 ? at : actual.length !== expected.length ? expected.length : -1;
+    if (mismatch !== -1) {
+      const label = prefix.trim();
+      // One expected line: "the Average: line"; several: "Battery: line 3".
+      const which = expected.length === 1 ? `the "${label}" line` : `"${label}" line ${mismatch + 1}`;
+      const said = (lines: string[]) =>
+        mismatch < lines.length ? lines[mismatch] : expected.length === 1 ? "no such line" : `no line ${mismatch + 1}`;
+      return caseResult(testCase, index, false, {
+        reason: crash ?? `${which} ==> expected: <${said(expected)}> but was: <${said(actual)}>`,
+        expected: expected.join("\n") + "\n",
+        actual: actual.length ? actual.join("\n") + "\n" : "",
       });
     }
   }

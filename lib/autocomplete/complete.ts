@@ -7,9 +7,10 @@ import type { ApiMember } from "./reference-api";
 export type Suggestion = {
   label: string;
   kind: "method" | "field" | "constructor";
-  /** What to insert; a snippet with ${1:param} placeholders when snippet is true. */
+  /** What to insert: only the name, never the parameters; the student types the call. */
   insertText: string;
-  snippet: boolean;
+  /** Shown after the label in the dropdown, never inserted: "(s)", "(String title)"; "" for fields. */
+  params: string;
   /** One line shown beside the label: "Integer.parseInt(s)", "String getTitle()". */
   detail: string;
   documentation?: string;
@@ -304,7 +305,7 @@ class KnownTypes {
     };
 
     if (type.endsWith("[]")) {
-      add({ label: "length", kind: "field", insertText: "length", snippet: false, detail: "int length", documentation: "The number of elements in the array.", sortText: "0" });
+      add({ label: "length", kind: "field", insertText: "length", params: "", detail: "int length", documentation: "The number of elements in the array.", sortText: "0" });
       return suggestions;
     }
 
@@ -333,7 +334,7 @@ class KnownTypes {
       const key = `${member.owner}(${member.params.join(",")})`;
       if (seen.has(key)) continue;
       seen.add(key);
-      suggestions.push({ ...fromSheet(member), label: member.owner });
+      suggestions.push({ ...fromSheet(member), label: member.owner, insertText: member.owner });
     }
     for (const javaClass of this.classes.values()) {
       if (javaClass.kind === "interface") continue;
@@ -351,9 +352,6 @@ class KnownTypes {
   }
 }
 
-/** ${1:a}, ${2:b} for each parameter. */
-const placeholders = (names: string[]) => names.map((name, i) => `\${${i + 1}:${name.replace(/[}$\\]/g, "")}}`).join(", ");
-
 /**
  * "Integer.parseInt(s)", "String.equalsIgnoreCase(t)", "new PrintWriter(name)":
  * by type, since the sheet's own receiver name (s) need not be the student's.
@@ -366,14 +364,13 @@ function sheetDetail(member: ApiMember): string {
 
 function fromSheet(member: ApiMember): Suggestion {
   if (member.kind === "field") {
-    return { label: member.name, kind: "field", insertText: member.name, snippet: false, detail: sheetDetail(member), documentation: member.doc, sortText: `0${member.name}` };
+    return { label: member.name, kind: "field", insertText: member.name, params: "", detail: sheetDetail(member), documentation: member.doc, sortText: `0${member.name}` };
   }
-  const params = member.params.filter((p) => p !== "...");
   return {
     label: member.name,
     kind: member.kind,
-    insertText: `${member.name}(${placeholders(params)})`,
-    snippet: true,
+    insertText: member.name,
+    params: `(${member.params.join(", ")})`,
     detail: sheetDetail(member),
     documentation: member.doc,
     sortText: `0${member.name}`,
@@ -382,15 +379,15 @@ function fromSheet(member: ApiMember): Suggestion {
 
 function fromClass(javaClass: JavaClass, member: JavaMember): Suggestion {
   if (member.kind === "field") {
-    return { label: member.name, kind: "field", insertText: member.name, snippet: false, detail: `${member.type} ${member.name}`, sortText: `1${member.name}` };
+    return { label: member.name, kind: "field", insertText: member.name, params: "", detail: `${member.type} ${member.name}`, sortText: `1${member.name}` };
   }
   const signature = member.params.map((p) => `${p.type} ${p.name}`).join(", ");
   const detail = member.kind === "constructor" ? `${javaClass.name}(${signature})` : `${member.type} ${member.name}(${signature})`;
   return {
     label: member.name,
     kind: member.kind,
-    insertText: `${member.name}(${placeholders(member.params.map((p) => p.name))})`,
-    snippet: true,
+    insertText: member.name,
+    params: `(${signature})`,
     detail,
     sortText: `1${member.name}`,
   };
