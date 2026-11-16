@@ -2,27 +2,51 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Collapsible } from "@/components/Collapsible";
 import { Testcases } from "@/components/Testcases";
 import { DIALOG_DANGER, DIALOG_SECONDARY, Dialog } from "@/components/workspace/Dialog";
-import { type AttemptState, clearAttempt, loadAttempt } from "@/lib/attempt-storage";
+import { attemptInput, submissionInput } from "@/lib/account-payload";
+import { recordSubmissionAction } from "@/lib/actions/attempts";
+import { type AttemptState, clearAttempt, loadAttempt, saveAttempt } from "@/lib/attempt-storage";
 import type { Exam } from "@/lib/content/types";
 
 /**
  * After Submit: the total out of the exam's points, then each question's
- * points and test cases, laid out like the Feedback panel.
+ * points and test cases, laid out like the Feedback panel. Read from this
+ * browser, where the full results (with the sample cases' reasons) are;
+ * My attempts has the copy saved to the account.
  */
-export function Results({ exam }: { exam: Exam }) {
+export function Results({ exam, userId }: { exam: Exam; userId: string }) {
   const router = useRouter();
+  const which = useMemo(() => ({ userId, examId: exam.id }), [userId, exam.id]);
   const [attempt, setAttempt] = useState<AttemptState | null>(null);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [confirmingRestart, setConfirmingRestart] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reading browser storage after mount
-    setAttempt(loadAttempt(exam.id));
-  }, [exam.id]);
+    setAttempt(loadAttempt(which));
+  }, [which]);
+
+  /** Saves a submission that did not reach the account when it was made. */
+  async function saveToAccount() {
+    const info = attempt && attemptInput(exam.id, attempt);
+    if (!attempt?.submission || !info) return;
+    setSaving(true);
+    setSaveError(null);
+    const result = await recordSubmissionAction(submissionInput(info, attempt.submission)).catch(() => null);
+    setSaving(false);
+    if (result?.ok) {
+      const next = { ...attempt, submission: { ...attempt.submission, saved: true } };
+      saveAttempt(which, next);
+      setAttempt(next);
+    } else {
+      setSaveError(result && !result.ok ? result.error : "The server could not be reached.");
+    }
+  }
 
   if (!attempt) return <main data-theme="exam" className="flex-1 bg-[#1e1e1e]" aria-busy="true" />;
 
@@ -53,6 +77,22 @@ export function Results({ exam }: { exam: Exam }) {
                 {attempt.timer?.timed ? " · timed" : " · untimed"}
                 {submission.automatic && " · submitted automatically when time ran out"}
               </p>
+              {submission.saved === false ? (
+                <p data-testid="results-unsaved" className="mt-2 text-sm text-amber-300">
+                  Not saved to your account yet{saveError ? `: ${saveError}` : "."}{" "}
+                  <button type="button" className="underline disabled:opacity-50" disabled={saving} onClick={() => void saveToAccount()}>
+                    {saving ? "Saving…" : "Try again"}
+                  </button>
+                </p>
+              ) : (
+                <p data-testid="results-saved" className="text-sm text-neutral-400">
+                  Saved to{" "}
+                  <Link href="/attempts" className="underline">
+                    My attempts
+                  </Link>
+                  .
+                </p>
+              )}
             </section>
 
             <div className="overflow-hidden rounded border border-[#3c3c3c] bg-[#1f1f1f]">
@@ -118,7 +158,7 @@ export function Results({ exam }: { exam: Exam }) {
                 data-testid="restart-confirm-yes"
                 className={DIALOG_DANGER}
                 onClick={() => {
-                  clearAttempt(exam.id);
+                  clearAttempt(which);
                   router.push(`/exams/${exam.id}#0`);
                 }}
               >
@@ -127,7 +167,9 @@ export function Results({ exam }: { exam: Exam }) {
             </>
           }
         >
-          <p>Your submitted code and results for this exam are cleared, and you start from the beginning.</p>
+          <p>
+            You start this exam again from the beginning, with empty files. This attempt stays in My attempts.
+          </p>
         </Dialog>
       )}
     </main>

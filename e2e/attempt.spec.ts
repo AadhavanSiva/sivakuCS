@@ -7,7 +7,6 @@ import { readFileSync } from "node:fs";
 
 const EXAM_ID = "cs180/samples";
 const EXAM = `/exams/${EXAM_ID}`;
-const STORAGE_KEY = `sivaku:attempt:v1:${EXAM_ID}`;
 const TICKET = "cs180/samples/01-ticket-price";
 const TICKET_SOLUTION = readFileSync("content/cs180/samples/01-ticket-price/solution/Main.java", "utf8");
 const GRADING_TIMEOUT = 4 * 60_000;
@@ -48,8 +47,12 @@ async function fileText(page: Page, path: string) {
   });
 }
 
+/** The browser's copy of the signed-in user's attempt ("sivaku:attempt:v2:<user id>:<exam id>"). */
 const stored = (page: Page) =>
-  page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null"), STORAGE_KEY);
+  page.evaluate((examId) => {
+    const key = Object.keys(window.localStorage).find((k) => k.startsWith("sivaku:attempt:v2:") && k.endsWith(`:${examId}`));
+    return key ? JSON.parse(window.localStorage.getItem(key)!) : null;
+  }, EXAM_ID);
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/exams");
@@ -102,11 +105,12 @@ test("at zero the code locks and the exam is submitted automatically", async ({ 
   // Bring the deadline forward to a few seconds from now, as if the hour had
   // passed. Done away from the exam page, which saves its state as it is left.
   await page.goto("/exams");
-  await page.evaluate((key) => {
+  await page.evaluate((examId) => {
+    const key = Object.keys(window.localStorage).find((k) => k.startsWith("sivaku:attempt:v2:") && k.endsWith(`:${examId}`))!;
     const attempt = JSON.parse(window.localStorage.getItem(key)!);
     attempt.timer.deadline = Date.now() + 4_000;
     window.localStorage.setItem(key, JSON.stringify(attempt));
-  }, STORAGE_KEY);
+  }, EXAM_ID);
   await page.goto(`${EXAM}#1`);
   await expect(page.getByTestId("countdown")).toBeVisible();
 

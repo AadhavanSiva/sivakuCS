@@ -6,7 +6,9 @@ real ones on Ed. Java compiles and runs entirely in the student's browser.
 **Status:** Milestones 1 to 3 of 5 are done: Java 25 runs in the browser,
 questions are graded by the same code in the browser and in `npm run
 verify`, and a full exam can be sat at `/exams`, timed or not, with results
-after Submit. Accounts and the two practice exams come next.
+after Submit. Milestone 4 (accounts: Google sign-in, My attempts) is built
+and tested, and goes live once Google sign-in and the Neon database are set
+up ([Accounts](#accounts)). The two practice exams come next.
 
 Unofficial practice. Not affiliated with Purdue University or Ed.
 
@@ -43,18 +45,23 @@ You need Git, Node.js 26 LTS and a JDK 25.
 
    No Homebrew? Install it from [brew.sh](https://brew.sh), or download `gh` directly.
 
-5. **Install and run.**
+5. **Install.**
 
    ```bash
    npm ci
    npx playwright install chromium   # the browser the tests drive
-   npm run dev
    ```
 
-   Open <http://localhost:3000/lab>.
+6. **Secrets.** Create `.env.local` in the repo folder with the four
+   variables in [`.env.example`](.env.example) ([Accounts](#accounts) says
+   where each comes from). It is ignored by Git; never commit it.
 
-Vercel comes later. No account is needed until the first deploy, and the
-deploy waits for the owner's go-ahead.
+7. **Database tables** (once per database): `npm run db:migrate`.
+
+8. **Run.** `npm run dev`, then open <http://localhost:3000> and sign in.
+
+The site is deployed on Vercel from `main` ([Accounts](#accounts) lists the
+variables it needs there too).
 
 ### On Windows
 
@@ -65,7 +72,7 @@ winget install --id OpenJS.NodeJS.LTS --exact
 winget install --id EclipseAdoptium.Temurin.25.JDK --exact
 ```
 
-Then open a new terminal and follow step 5 above.
+Then open a new terminal and follow steps 5 to 8 above.
 
 ## Commands
 
@@ -77,7 +84,9 @@ Then open a new terminal and follow step 5 above.
 | `npm run typecheck` | Generates Next.js route types, then checks types with `tsc` |
 | `npm run content` | Bundles `content/` into `generated/content.json` for the site, without solutions. Runs by itself before `dev` and `build` |
 | `npm run verify` | Checks every question: its structure, that the reference solution passes every test, and that each broken solution fails a hidden one. Needs JDK 25 |
-| `npm run test:e2e` | Browser tests (Playwright, headless Chromium). Starts a dev server on port 3100 unless one is running there; with `npm run dev` already running, use `E2E_PORT=3000 npm run test:e2e`. The grading tests also need JDK 25. CI runs them on every push |
+| `npm run test:e2e` | Browser tests (Playwright, headless Chromium). Starts its own in-memory database and a test dev server on port 3100 (built into `.next-e2e`, so it runs beside `npm run dev`, and it never uses `.env.local`'s database). The grading tests also need JDK 25. CI runs them on every push |
+| `npm run test:accounts` | The account data layer against an in-memory Postgres: above all, that one account can never read or change another's data |
+| `npm run db:migrate` | Creates the tables in `db/schema.sql` in the database in `DATABASE_URL` (from `.env.local`). Safe to run again |
 | `npm run build:sandbox` | Rebuilds `public/cheerpj/sandbox.jar` from `java/sandbox` (needs JDK 25) |
 | `npm run check:cheerpj` | Fails if the CheerpJ runtime on its CDN no longer matches `cheerpj-lock.json` |
 
@@ -243,13 +252,114 @@ laptop):
 
 The attempt (timer, code, checkpoints, current slide, submission) is kept
 in the browser's local storage (`lib/attempt-storage.ts`), so a refresh
-resumes where the student was; Milestone 4 adds saving to an account.
+resumes where the student was. Test and Submit also save to the student's
+account ([Accounts](#accounts)).
 
 The editor is a small Monaco component of our own
 (`components/workspace/JavaEditor.tsx`) rather than `@monaco-editor/react`'s:
 Next.js keeps a visited page alive in the background, and that wrapper's
 editor failed ("InstantiationService has been disposed") when a student left
 the exam page and came back. A browser test covers leaving and returning.
+
+## Accounts
+
+Sign-in is required: Google through [Auth.js](https://authjs.dev) (v5,
+`next-auth@5.0.0-beta.32`, pinned because v5 is still published as a beta),
+any Google account. A signed-out visitor sees only the landing page and
+`/privacy`; `proxy.ts` sends every other page to the landing page, which
+returns them to where they were going after sign-in.
+
+### What is stored
+
+Four small tables in Neon Postgres (`db/schema.sql`), described to students
+on `/privacy` (keep the two in step):
+
+| Table | Holds |
+|---|---|
+| `users` | Our id, the Google account id ("sub"), when they first signed in. Not the name, email or picture |
+| `attempts` | User, exam, started, submitted, timed, submitted automatically, score |
+| `question_results` | Per attempt and question: points and each case's pass or fail, from the latest Test or Submit, overwritten each time |
+| `submissions` | Per user and question: only the last code sent with Test or Submit, overwritten each time |
+
+The code being written stays in the browser until Test or Submit. There is
+no checkpoint history, no compiler output, no program output. Signing out
+clears the browser's copy of every attempt; deleting the account (on
+`/privacy`) deletes all four tables' rows for that user.
+
+### How it fits together
+
+- **Sessions** are encrypted cookies (Auth.js's JWT strategy), so the
+  database has no session tables. On first sign-in `auth.ts` adds the Google
+  account id to `users`, and the session carries our user id after that.
+- **Every query is limited to the signed-in user on the server.** The
+  server actions (`lib/actions/attempts.ts`) read the user from the session,
+  never from the browser, and every query in `lib/db/attempts.ts` filters by
+  that user, so another student's attempt id is simply "not found".
+- **What the browser sends is checked** against the exam's content: the
+  question must be in the exam, the files must be its editable files, and
+  the cases must be its cases. Points come from the content. Which cases
+  passed is taken on trust, since the Java runs in the student's browser; a
+  student who tampers with that only fools their own practice score.
+- **Saving can fail without losing work.** Results are kept in the browser
+  first; a checkpoint that does not reach the account says so (Submit saves
+  every question again), and the results page offers "Try again" for a
+  submission that did not.
+- **The database driver** is node-postgres with a pool and
+  `attachDatabasePool`, as Neon recommends for Vercel Functions.
+
+### Environment variables
+
+Set in `.env.local` for development and in Vercel (Project, Settings,
+Environment Variables) for the site. None of them reach the browser.
+
+| Name | What it is |
+|---|---|
+| `AUTH_SECRET` | Random secret that encrypts the session cookies. Generate with `npx auth secret --raw`. Use a different one in Vercel than locally |
+| `AUTH_GOOGLE_ID` | The OAuth client ID from Google Cloud Console |
+| `AUTH_GOOGLE_SECRET` | The OAuth client secret from Google Cloud Console |
+| `DATABASE_URL` | Neon's **pooled** connection string (the host has `-pooler` in it), with `sslmode=require` changed to `sslmode=verify-full`: the same strict certificate check `pg` does today, without its warning that `require` will mean less in a future version |
+
+The database is the Neon project `sivakucs` (AWS US East, N. Virginia, near
+Vercel's default region), with two branches: `dev` for localhost
+(`.env.local`) and `main` for the site (Vercel). Both have the schema; after
+a schema change, run `npm run db:migrate` locally and apply `db/schema.sql`
+to `main` in Neon's SQL Editor.
+
+Google sign-in redirects to `<site>/api/auth/callback/google`; both
+`http://localhost:3000/...` and the production address must be listed in
+the Google OAuth client. Vercel preview deployments have their own
+addresses, which Google does not know, so sign-in works on localhost and the
+production address only.
+
+### Tests
+
+A test cannot sign in with Google, so the browser tests use a test login
+(`lib/test-login.ts`): with `SIVAKU_TEST_LOGIN=1` the landing page also
+offers "Test sign-in" as any made-up name. It is refused on Vercel and in
+production builds (the site stops with an error rather than offer it), and
+`npm run test:accounts` checks that. The tests' database is
+[PGlite](https://pglite.dev) (Postgres compiled to WebAssembly, in memory)
+served on a local port, so the site's own driver talks to it as it does to
+Neon. `e2e/accounts.spec.ts` checks Milestone 4's acceptance test: two
+accounts cannot see each other's attempts or code, even with the address of
+the other's attempt, nor on the same computer after signing out.
+
+### Choices
+
+How Milestone 4 reads the brief, where it left room:
+
+- **Test saves to the account,** as well as Submit ("in-progress code lives
+  in the browser until Test or Submit"): the question's latest result in
+  the attempt, and its code into `submissions`. So "last submitted code"
+  means the last code sent with Test or Submit.
+- **A few columns beyond the brief's list**, all small: whether an attempt
+  was submitted automatically, its maximum score, whether the code
+  compiled, and when, and from which attempt, the code was saved (My
+  attempts says whether the code shown is from that attempt or a later one,
+  since only the latest is kept).
+- **Delete my account** on `/privacy`, so the privacy page can promise it.
+- **Unsubmitted attempts** show in My attempts as "not submitted", with the
+  points of each question's last Test.
 
 ## Owner decisions
 

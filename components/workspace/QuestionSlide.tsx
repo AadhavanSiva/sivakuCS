@@ -15,6 +15,7 @@ import { setCompletionContext } from "./completions";
 import { RunConsole, type RunConsoleHandle } from "./RunConsole";
 
 export type SaveStatus = "saved" | "saving" | "failed";
+export type CheckpointSync = "saving" | "saved" | "failed";
 
 type Props = {
   /** Keys the editor's buffers, so a new attempt starts from fresh ones. */
@@ -27,6 +28,8 @@ type Props = {
   /** The student's editable files; missing ones are taken from the starter. */
   studentFiles: JavaFiles;
   checkpoint: Checkpoint | undefined;
+  /** Whether the last Test's checkpoint reached the account (this visit only). */
+  checkpointSync?: CheckpointSync;
   saveStatus: SaveStatus;
   /** Set when the code cannot be changed (time is up, or submitted): every file is read-only and Run and Test are off. */
   lockReason?: string;
@@ -41,7 +44,7 @@ type Props = {
  * bar, and the console with Run and Test.
  */
 export function QuestionSlide(props: Props) {
-  const { attemptId, question, number, referenceHtml, referenceApi, studentFiles, checkpoint, saveStatus, lockReason, onEdit, onSaveNow, onTested } = props;
+  const { attemptId, question, number, referenceHtml, referenceApi, studentFiles, checkpoint, checkpointSync, saveStatus, lockReason, onEdit, onSaveNow, onTested } = props;
   const locked = lockReason !== undefined;
   const { meta } = question;
   const tabs = [...meta.editable, ...meta.readOnly];
@@ -114,7 +117,12 @@ export function QuestionSlide(props: Props) {
           {!testing && !testError && checkpoint && (
             <>
               <Testcases result={checkpoint.result} />
-              <p className="mt-2 text-xs text-neutral-500">Checkpoint saved {new Date(checkpoint.at).toLocaleTimeString()}.</p>
+              <p data-testid="checkpoint-status" className="mt-2 text-xs text-neutral-500">
+                Checkpoint saved {new Date(checkpoint.at).toLocaleTimeString()}.
+                {checkpointSync === "saving" && " Saving to your account…"}
+                {checkpointSync === "saved" && " Saved to your account."}
+                {checkpointSync === "failed" && " Not saved to your account yet; Submit saves every question."}
+              </p>
             </>
           )}
           {!testing && !testError && !checkpoint && (

@@ -15,20 +15,29 @@
     "verify": "tsx scripts/verify.ts",
     "content": "tsx scripts/build-content.ts",
     "typecheck": "next typegen && tsc --noEmit",
-    "assets": "npm run content && node scripts/copy-monaco.mjs"
+    "assets": "npm run content && node scripts/copy-monaco.mjs",
+    "test:accounts": "tsx scripts/test-accounts.ts",
+    "db:migrate": "tsx scripts/db-migrate.ts"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "@vercel/functions": "^3.11.3",
     "marked": "^18.2.0",
     "monaco-editor": "^0.57.0",
     "next": "16.4.6",
+    "next-auth": "5.0.0-beta.32",
+    "pg": "^8.23.1",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
+    "@electric-sql/pglite-socket": "^0.2.19",
     "@playwright/test": "^1.65.1",
     "@tailwindcss/turbopack": "4.3.3",
     "@types/node": "^20",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

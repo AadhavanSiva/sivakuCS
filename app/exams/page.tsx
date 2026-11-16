@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SiteHeader } from "@/components/SiteHeader";
 import { listExams } from "@/lib/content";
 
 export const metadata: Metadata = { title: "Exams · sivakuCS" };
@@ -7,13 +8,10 @@ export const metadata: Metadata = { title: "Exams · sivakuCS" };
 export default function ExamsPage() {
   const exams = listExams();
   return (
+    <>
+    <SiteHeader />
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-6">
-      <header className="flex items-baseline justify-between">
-        <h1 className="text-2xl font-semibold">Practice exams</h1>
-        <Link href="/" className="text-sm underline">
-          Home
-        </Link>
-      </header>
+      <h1 className="text-2xl font-semibold">Practice exams</h1>
       <ul className="flex flex-col gap-3">
         {exams.map((exam) => {
           const points = exam.questions.reduce((sum, q) => sum + q.meta.points, 0);
@@ -37,5 +35,6 @@ export default function ExamsPage() {
         })}
       </ul>
     </main>
+    </>
   );
 }

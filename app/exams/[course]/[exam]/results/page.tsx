@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
+import { currentUserId } from "@/auth";
 import { Results } from "@/components/results/Results";
 import { getExam, listExams } from "@/lib/content";
 
@@ -32,5 +33,7 @@ async function ExamResults({ params }: { params: Promise<Params> }) {
   const { course, exam } = await params;
   const found = getExam(`${course}/${exam}`);
   if (!found) notFound();
-  return <Results exam={found} />;
+  const userId = await currentUserId();
+  if (!userId) redirect("/");
+  return <Results exam={found} userId={userId} />;
 }

@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { attemptInput, checkpointInput, submissionInput } from "@/lib/account-payload";
+import { recordSubmissionAction, saveCheckpointAction, startAttemptAction } from "@/lib/actions/attempts";
 import {
   type AttemptState,
   type Checkpoint,
@@ -17,7 +19,7 @@ import { getJava } from "@/lib/java-runtime";
 import { Countdown } from "./Countdown";
 import { DIALOG_DANGER, DIALOG_PRIMARY, DIALOG_SECONDARY, Dialog } from "./Dialog";
 import { InstructionsSlide } from "./InstructionsSlide";
-import { QuestionSlide, type SaveStatus } from "./QuestionSlide";
+import { type CheckpointSync, QuestionSlide, type SaveStatus } from "./QuestionSlide";
 import { SlideRail } from "./SlideRail";
 import { TopBar } from "./TopBar";
 
@@ -37,11 +39,15 @@ function slideFromHash(slides: number): number | null {
  * Submit, the submitted code stays here, read-only, and the results have
  * their own page. Everything is kept in this browser
  * (lib/attempt-storage.ts), so a refresh resumes where the student was,
- * with the same time left.
+ * with the same time left. Test and Submit also save to the student's
+ * account (My attempts); the code in progress stays in the browser.
  */
-export function Workspace({ exam }: { exam: Exam }) {
+export function Workspace({ exam, userId }: { exam: Exam; userId: string }) {
   const router = useRouter();
   const slides = exam.questions.length + 1;
+  const which = useMemo(() => ({ userId, examId: exam.id }), [userId, exam.id]);
+  /** Per question, whether the last Test reached the account. */
+  const [checkpointSync, setCheckpointSync] = useState<Record<string, CheckpointSync>>({});
   const [attempt, setAttempt] = useState<AttemptState | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
   const [timeUp, setTimeUp] = useState(false);
@@ -56,18 +62,18 @@ export function Workspace({ exam }: { exam: Exam }) {
 
   // localStorage exists only in the browser, so the attempt is read after the first render.
   useEffect(() => {
-    const saved = loadAttempt(exam.id);
+    const saved = loadAttempt(which);
     const slide = slideFromHash(slides) ?? Math.min(saved.slide, slides - 1);
     const restored = { ...saved, slide };
     latest.current = restored;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reading browser storage after mount
     setAttempt(restored);
-  }, [exam.id, slides]);
+  }, [which, slides]);
 
   const saveNow = useCallback(() => {
     clearTimeout(saveTimer.current);
-    if (latest.current) setSaveStatus(saveAttempt(exam.id, latest.current) ? "saved" : "failed");
-  }, [exam.id]);
+    if (latest.current) setSaveStatus(saveAttempt(which, latest.current) ? "saved" : "failed");
+  }, [which]);
 
   const update = useCallback(
     (change: (state: AttemptState) => AttemptState, delay = 0) => {
@@ -122,11 +128,15 @@ export function Workspace({ exam }: { exam: Exam }) {
       setGradingQuestion(1);
       try {
         const graded = await gradeExam(java, exam, latest.current!.files, setGradingQuestion);
-        update((state) => ({
-          ...state,
-          submitting: undefined,
-          submission: { at: Date.now(), automatic: state.submitting?.automatic ?? automatic, ...graded },
-        }));
+        const submission = { at: Date.now(), automatic: latest.current!.submitting?.automatic ?? automatic, ...graded };
+        // Kept in the browser first, so nothing is lost if the account cannot be reached.
+        update((state) => ({ ...state, submitting: undefined, submission: { ...submission, saved: false } }));
+        // Then to the account; if that fails, the results page offers to try again.
+        const attemptInfo = attemptInput(exam.id, latest.current!);
+        if (attemptInfo) {
+          const saved = await recordSubmissionAction(submissionInput(attemptInfo, submission)).catch(() => null);
+          if (saved?.ok) update((state) => ({ ...state, submission: state.submission && { ...state.submission, saved: true } }));
+        }
         router.push(`/exams/${exam.id}/results`);
       } catch (error) {
         setSubmitError(error instanceof Error ? error.message : String(error));
@@ -160,16 +170,35 @@ export function Workspace({ exam }: { exam: Exam }) {
       ...state,
       timer: { timed, startedAt: now, deadline: timed ? now + exam.meta.minutes * 60_000 : undefined },
     }));
+    // The attempt appears in My attempts. If this fails, Test or Submit adds it.
+    const info = attemptInput(exam.id, latest.current!);
+    if (info) void startAttemptAction(info).catch(() => {});
+  }
+
+  /** Test was pressed: keep the checkpoint here, then save it to the account. */
+  function tested(questionId: string, checkpoint: Checkpoint) {
+    update((state) => ({ ...state, checkpoints: { ...state.checkpoints, [questionId]: checkpoint } }));
+    const info = attemptInput(exam.id, latest.current!);
+    if (!info) return;
+    setCheckpointSync((s) => ({ ...s, [questionId]: "saving" }));
+    saveCheckpointAction(checkpointInput(info, questionId, checkpoint))
+      .catch(() => null)
+      .then((result) => {
+        // A later Test of the same question may have overtaken this one.
+        if (latest.current?.checkpoints[questionId] !== checkpoint) return;
+        setCheckpointSync((s) => ({ ...s, [questionId]: result?.ok ? "saved" : "failed" }));
+      });
   }
 
   function startNewAttempt() {
-    clearAttempt(exam.id);
+    clearAttempt(which);
     const fresh = newAttempt();
     latest.current = fresh;
     setAttempt(fresh);
     setTimeUp(false);
     setConfirmingRestart(false);
     setSubmitError(null);
+    setCheckpointSync({});
     window.history.replaceState(null, "", "#0");
     saveNow();
   }
@@ -234,6 +263,7 @@ export function Workspace({ exam }: { exam: Exam }) {
             referenceApi={exam.referenceApi ?? []}
             studentFiles={filesOf(question.id)}
             checkpoint={attempt.checkpoints[question.id]}
+            checkpointSync={checkpointSync[question.id]}
             saveStatus={saveStatus}
             lockReason={lockReason}
             onEdit={(name, text) =>
@@ -246,9 +276,7 @@ export function Workspace({ exam }: { exam: Exam }) {
               )
             }
             onSaveNow={saveNow}
-            onTested={(checkpoint: Checkpoint) =>
-              update((state) => ({ ...state, checkpoints: { ...state.checkpoints, [question.id]: checkpoint } }))
-            }
+            onTested={(checkpoint: Checkpoint) => tested(question.id, checkpoint)}
           />
         ) : (
           <InstructionsSlide
@@ -349,7 +377,9 @@ export function Workspace({ exam }: { exam: Exam }) {
             </>
           }
         >
-          <p>Your submitted code and results for this exam are cleared, and you start from the beginning.</p>
+          <p>
+            You start this exam again from the beginning, with empty files. Your last attempt stays in My attempts.
+          </p>
         </Dialog>
       )}
     </div>

@@ -4,7 +4,8 @@ name: CI
 # solution must fail at least one hidden case (npm run verify), on the
 # same JDK version the browser runs (25). Also types, lint and the build,
 # and the browser tests: Java compiling and running in Chromium through
-# CheerpJ, grading that agrees with verify, and the exam workspace.
+# CheerpJ, grading that agrees with verify, the exam workspace, and
+# accounts (signed in with a test login, on an in-memory Postgres).
 
 on:
   push:
@@ -53,6 +54,10 @@ jobs:
       - name: Verify questions
         run: npm run verify
 
+      # Accounts: one student can never read or change another's data.
+      - name: Account data tests
+        run: npm run test:accounts
+
       - name: Build
         run: npm run build
 
@@ -79,7 +84,7 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      # Starts the dev server itself (which runs npm run assets first).
+      # Starts the test database and dev server itself (playwright.config.ts).
       - name: Browser tests
         run: npx playwright test
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
+import { currentUserId } from "@/auth";
 import { Workspace } from "@/components/workspace/Workspace";
 import { getExam, listExams } from "@/lib/content";
 
@@ -33,5 +34,9 @@ async function ExamWorkspace({ params }: { params: Promise<Params> }) {
   const { course, exam } = await params;
   const found = getExam(`${course}/${exam}`);
   if (!found) notFound();
-  return <Workspace exam={found} />;
+  // proxy.ts has already sent signed-out visitors away; the browser keeps
+  // each user's attempt separately, by this id.
+  const userId = await currentUserId();
+  if (!userId) redirect("/");
+  return <Workspace exam={found} userId={userId} />;
 }
