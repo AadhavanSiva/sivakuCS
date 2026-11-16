@@ -6,12 +6,18 @@ import { Testcases } from "@/components/Testcases";
 import { getJava, preloadJava, useJavaRuntime } from "@/lib/java-runtime";
 import { gradeQuestion } from "@/lib/grading/grade";
 import type { GradeResult, Question } from "@/lib/grading/types";
+import type { SandboxMethod, SandboxPaths } from "@/lib/java/backend";
 import type { JavaFiles } from "@/lib/java/programs";
 
 declare global {
   interface Window {
     /** For the browser tests: grade any question bundle in this tab's JVM. */
     sivakuGrade?: (question: Question, files: JavaFiles) => Promise<GradeResult>;
+    /** For the browser tests (the Midterm 3 proofs): call the sandbox directly. */
+    sivakuJava?: {
+      paths: SandboxPaths;
+      call: (method: SandboxMethod, args: string[], options?: { timeoutMs?: number }) => Promise<string | null>;
+    };
   }
 }
 
@@ -26,8 +32,10 @@ export function GradeLab({ questions }: { questions: Question[] }) {
   useEffect(() => {
     preloadJava();
     window.sivakuGrade = (q, f) => gradeQuestion(getJava(), q, f);
+    window.sivakuJava = { paths: getJava().paths, call: (method, args, options) => getJava().call(method, args, options) };
     return () => {
       delete window.sivakuGrade;
+      delete window.sivakuJava;
     };
   }, []);
 

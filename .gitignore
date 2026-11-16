@@ -63,3 +63,6 @@ next-env.d.ts
 
 # private reference copies of real exam questions (never commit, never deploy)
 reference-private/
+
+# Midterm 3 proof: the JUnit jar, downloaded by scripts/fetch-junit.mjs
+public/m3-proof/

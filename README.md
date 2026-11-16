@@ -194,6 +194,24 @@ handling and file paths.
   `/files/` regardless of `user.dir`, so the program's working directory is
   `/files/` and `user.dir` is set to match.
 
+## Midterm 3: what grading in the browser needs
+
+Before any Midterm 3 question, each way of grading was proved in CheerpJ
+(section 8 of the private exam specs), riskiest first. The proofs are Java
+programs in `java/proofs/m3/`; `npx playwright test e2e/m3-proofs.spec.ts`
+runs each on the local JDK and in the browser, checks it, and writes the
+numbers to `test-results/m3-proofs.json`. The JUnit jar it needs is
+downloaded (and checked against Maven Central) into the gitignored
+`public/m3-proof/` by `node scripts/fetch-junit.mjs`. Browser times below
+are from a Windows laptop.
+
+| Topic | In the browser | How it will be graded |
+|---|---|---|
+| Threads (A, B, G) | Works. With a store that sleeps between read and write, an unsynchronised counter lost updates in 20 of 20 runs and oversold a stock in 20 of 20; a synchronised one never did. An instrumented source told parallel from serial, and overlapping or skipped slices, in 20 of 20 runs each, and recorded which thread read each index. 80 counter runs took 9.2 s (7.5 s on the JDK). | **Run the student's methods once on one thread first.** Without that, the first time several threads run a path together CheerpJ can kill one inside its own code (a `ClassCastException` or `ArrayIndexOutOfBoundsException` before the thread's code starts): a correct synchronised counter then ended at 70 of 80, reproducibly. With the warm-up: 80 of 80 runs correct, in 4 fresh JVMs. `join()` itself always waits. |
+| Sockets (E, F, G) | Real `ServerSocket`/`Socket` do not work (`UnsatisfiedLinkError` in the NIO socket code). The fallback works: the student's compiled `new Socket(...)` and `new ServerSocket(...)` are rewritten to in-memory fakes, and a handler is given a fake socket directly. A client, a thread-per-client server and a handler all behaved as on the JDK, in 25–60 ms each. | The fallback. The fakes pass an inert `SocketImpl` to `Socket`'s and `ServerSocket`'s protected constructors, so the real one is never created. |
+| JUnit (D) | Both work and score alike: the model suite 14, the starter 2, each bug caught by its own test with JUnit's messages. Real JUnit Platform (3.2 MB jar): first run 2.1 s (1.7 s of it loading JUnit), a second run 1.0 s. A small runner (`@Test` and the reference sheet's assertions): 72 ms, no download. | **The small runner**, about 20 times faster with nothing to download; real JUnit stays in the proof as the reference it must agree with. |
+| Swing (C) | Real Swing cannot start: CheerpJ runs in a Web Worker with no display, and Swing's look and feel needs AWT's toolkit (`NullPointerException` in `CheerpJDisplay`), headless or not. The fallback works: the student's panel class is loaded with `JPanel`, `JButton`, `JLabel` and `JTextField` renamed in its constant pool to small fakes built on AWT's `Component`; clicks, typed text, labels, disabled buttons, lambda and inner-class listeners all behave as with Swing. | The fallback. The fakes keep their own enabled flag, since `Component.setEnabled` checks focus, which starts the toolkit. On the JDK, `doClick()` holds the button for 68 ms; graders use `doClick(0)`. |
+
 ## The exam workspace
 
 `/exams` lists the exams; `/exams/<course>/<exam>` is an attempt, laid out
