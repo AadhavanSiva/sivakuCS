@@ -1,0 +1,13 @@
+{
+  "title": "Rental fleet",
+  "points": 13,
+  "editable": [
+    "Fleet.java"
+  ],
+  "readOnly": [
+    "Main.java",
+    "Rental.java",
+    "Bike.java",
+    "Scooter.java"
+  ]
+}

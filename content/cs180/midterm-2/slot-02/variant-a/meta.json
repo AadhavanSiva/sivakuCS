@@ -1,0 +1,10 @@
+{
+  "title": "Seedling",
+  "points": 8,
+  "editable": [
+    "Seedling.java"
+  ],
+  "readOnly": [
+    "Main.java"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "title": "Temperature summary",
+  "points": 13,
+  "editable": [
+    "Main.java"
+  ],
+  "readOnly": [
+    "temperatures.txt"
+  ]
+}

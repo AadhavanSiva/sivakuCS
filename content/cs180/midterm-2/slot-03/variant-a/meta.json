@@ -1,0 +1,10 @@
+{
+  "title": "Dimmer",
+  "points": 9,
+  "editable": [
+    "Dimmer.java"
+  ],
+  "readOnly": [
+    "Main.java"
+  ]
+}

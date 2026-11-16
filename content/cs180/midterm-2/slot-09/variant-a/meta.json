@@ -1,0 +1,11 @@
+{
+  "title": "Express parcel",
+  "points": 13,
+  "editable": [
+    "ExpressParcel.java"
+  ],
+  "readOnly": [
+    "Main.java",
+    "Parcel.java"
+  ]
+}

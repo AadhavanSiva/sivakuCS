@@ -1,0 +1,102 @@
+{
+  "kind": "stdio",
+  "timeLimitMs": 5000,
+  "cases": [
+    {
+      "name": "Sample from the handout", "points": 0, "sample": true, "stdin": "45\n12\n",
+      "labelledLines": [
+        { "prefix": "Invalid: ", "lines": ["Invalid: not from 1 to 40"] },
+        { "prefix": "Table: ", "lines": ["Table: 12"] },
+        { "prefix": "Attempts: ", "lines": ["Attempts: 2"] }
+      ]
+    },
+    {
+      "name": "Case 1", "points": 1, "stdin": "12\n",
+      "labelledLines": [
+        { "prefix": "Invalid: ", "lines": [] },
+        { "prefix": "Table: ", "lines": ["Table: 12"] },
+        { "prefix": "Attempts: ", "lines": ["Attempts: 1"] }
+      ]
+    },
+    {
+      "name": "Case 2", "points": 1, "stdin": "abc\n12\n",
+      "labelledLines": [
+        { "prefix": "Invalid: ", "lines": ["Invalid: not a whole number"] },
+        { "prefix": "Table: ", "lines": ["Table: 12"] },
+        { "prefix": "Attempts: ", "lines": ["Attempts: 2"] }
+      ]
+    },
+    {
+      "name": "Case 3", "points": 1, "stdin": "0\n5\n",
+      "labelledLines": [
+        { "prefix": "Invalid: ", "lines": ["Invalid: not from 1 to 40"] },
+        { "prefix": "Table: ", "lines": ["Table: 5"] },
+        { "prefix": "Attempts: ", "lines": ["Attempts: 2"] }
+      ]
+    },
+    {
+      "name": "Case 4", "points": 1, "stdin": "41\n40\n",
+      "labelledLines": [
+        { "prefix": "Invalid: ", "lines": ["Invalid: not from 1 to 40"] },
+        { "prefix": "Table: ", "lines": ["Table: 40"] },
+        { "prefix": "Attempts: ", "lines": ["Attempts: 2"] }
+      ]
+    },
+    {
+      "name": "Case 5", "points": 1, "stdin": "1\n",
+      "labelledLines": [
+        { "prefix": "Invalid: ", "lines": [] },
+        { "prefix": "Table: ", "lines": ["Table: 1"] },
+        { "prefix": "Attempts: ", "lines": ["Attempts: 1"] }
+      ]
+    },
+    {
+      "name": "Case 6", "points": 1, "stdin": "\n7\n",
+      "labelledLines": [
+        { "prefix": "Invalid: ", "lines": ["Invalid: not a whole number"] },
+        { "prefix": "Table: ", "lines": ["Table: 7"] },
+        { "prefix": "Attempts: ", "lines": ["Attempts: 2"] }
+      ]
+    },
+    {
+      "name": "Case 7", "points": 1, "stdin": "3.5\n7\n",
+      "labelledLines": [
+        { "prefix": "Invalid: ", "lines": ["Invalid: not a whole number"] },
+        { "prefix": "Table: ", "lines": ["Table: 7"] },
+        { "prefix": "Attempts: ", "lines": ["Attempts: 2"] }
+      ]
+    },
+    {
+      "name": "Case 8", "points": 1, "stdin": "-5\nx\n20\n",
+      "labelledLines": [
+        { "prefix": "Invalid: ", "lines": ["Invalid: not from 1 to 40", "Invalid: not a whole number"] },
+        { "prefix": "Table: ", "lines": ["Table: 20"] },
+        { "prefix": "Attempts: ", "lines": ["Attempts: 3"] }
+      ]
+    },
+    {
+      "name": "Case 9", "points": 1, "stdin": "12abc\n12\n",
+      "labelledLines": [
+        { "prefix": "Invalid: ", "lines": ["Invalid: not a whole number"] },
+        { "prefix": "Table: ", "lines": ["Table: 12"] },
+        { "prefix": "Attempts: ", "lines": ["Attempts: 2"] }
+      ]
+    },
+    {
+      "name": "Case 10", "points": 1, "stdin": "99999999999\n5\n",
+      "labelledLines": [
+        { "prefix": "Invalid: ", "lines": ["Invalid: not a whole number"] },
+        { "prefix": "Table: ", "lines": ["Table: 5"] },
+        { "prefix": "Attempts: ", "lines": ["Attempts: 2"] }
+      ]
+    },
+    {
+      "name": "Case 11", "points": 1, "stdin": "a\nb\nc\n50\n2\n",
+      "labelledLines": [
+        { "prefix": "Invalid: ", "lines": ["Invalid: not a whole number", "Invalid: not a whole number", "Invalid: not a whole number", "Invalid: not from 1 to 40"] },
+        { "prefix": "Table: ", "lines": ["Table: 2"] },
+        { "prefix": "Attempts: ", "lines": ["Attempts: 5"] }
+      ]
+    }
+  ]
+}

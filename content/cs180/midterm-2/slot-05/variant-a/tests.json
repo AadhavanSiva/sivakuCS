@@ -1,0 +1,16 @@
+{
+  "kind": "harness",
+  "timeLimitMs": 5000,
+  "cases": [
+    { "name": "Sample from the handout", "points": 0, "sample": true, "call": "sampleFromTheHandout" },
+    { "name": "Case 1", "points": 1, "call": "basic" },
+    { "name": "Case 2", "points": 1, "call": "oneDecimalRate" },
+    { "name": "Case 3", "points": 1, "call": "roundedRate" },
+    { "name": "Case 4", "points": 1, "call": "afterSetNights" },
+    { "name": "Case 5", "points": 1, "call": "afterSetNightlyRate" },
+    { "name": "Case 6", "points": 1, "call": "afterSetGuest" },
+    { "name": "Case 7", "points": 1, "call": "zeroRate" },
+    { "name": "Case 8", "points": 1, "call": "largeRate" },
+    { "name": "Case 9", "points": 1, "call": "twiceInARow" }
+  ]
+}

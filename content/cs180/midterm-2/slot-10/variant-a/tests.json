@@ -1,0 +1,20 @@
+{
+  "kind": "harness",
+  "timeLimitMs": 5000,
+  "cases": [
+    { "name": "Sample from the handout", "points": 0, "sample": true, "call": "sampleFromTheHandout" },
+    { "name": "Case 1", "points": 1, "call": "describeBike" },
+    { "name": "Case 2", "points": 1, "call": "describeScooter" },
+    { "name": "Case 3", "points": 1, "call": "scooterRateRounded" },
+    { "name": "Case 4", "points": 1, "call": "describePlainRental" },
+    { "name": "Case 5", "points": 1, "call": "describeUnseenRental" },
+    { "name": "Case 6", "points": 1, "call": "describeUnseenScooter" },
+    { "name": "Case 7", "points": 1, "call": "describeUnseenBike" },
+    { "name": "Case 8", "points": 1, "call": "countNone" },
+    { "name": "Case 9", "points": 1, "call": "countMixed" },
+    { "name": "Case 10", "points": 1, "call": "countUnseenScooters" },
+    { "name": "Case 11", "points": 1, "call": "countWithoutScooters" },
+    { "name": "Case 12", "points": 1, "call": "countAllScooters" },
+    { "name": "Case 13", "points": 1, "call": "scooterWholeRate" }
+  ]
+}

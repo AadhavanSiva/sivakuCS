@@ -1,0 +1,40 @@
+{
+  "kind": "files",
+  "timeLimitMs": 5000,
+  "cases": [
+    {
+      "name": "Sample from the handout",
+      "points": 0,
+      "sample": true,
+      "outputFiles": { "notice.txt": "Pier 7 Kayak Hire\nOpen 9am to 6pm\nLife jackets provided\n" }
+    },
+    {
+      "name": "Case 1",
+      "points": 1,
+      "outputFiles": { "notice.txt": "Pier 7 Kayak Hire\nOpen 9am to 6pm\nLife jackets provided\n" }
+    },
+    {
+      "name": "Case 2",
+      "points": 1,
+      "inputFiles": { "notice.txt": "Closed for winter\n" },
+      "outputFiles": { "notice.txt": "Pier 7 Kayak Hire\nOpen 9am to 6pm\nLife jackets provided\n" }
+    },
+    {
+      "name": "Case 3",
+      "points": 1,
+      "inputFiles": { "notice.txt": "Line one\nLine two\nLine three\nLine four\nLine five\nLine six\n" },
+      "outputFiles": { "notice.txt": "Pier 7 Kayak Hire\nOpen 9am to 6pm\nLife jackets provided\n" }
+    },
+    {
+      "name": "Case 4",
+      "points": 1,
+      "stdout": ""
+    },
+    {
+      "name": "Case 5",
+      "points": 1,
+      "inputFiles": { "notice.txt": "Pier 7 Kayak Hire\nOpen 9am to 6pm\nLife jackets provided\n" },
+      "outputFiles": { "notice.txt": "Pier 7 Kayak Hire\nOpen 9am to 6pm\nLife jackets provided\n" }
+    }
+  ]
+}

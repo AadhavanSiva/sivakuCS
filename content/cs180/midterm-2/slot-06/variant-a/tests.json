@@ -1,0 +1,17 @@
+{
+  "kind": "harness",
+  "timeLimitMs": 5000,
+  "cases": [
+    { "name": "Sample from the handout", "points": 0, "sample": true, "call": "sampleFromTheHandout" },
+    { "name": "Case 1", "points": 1, "call": "holdsTheSamePassenger" },
+    { "name": "Case 2", "points": 1, "call": "basePrice" },
+    { "name": "Case 3", "points": 1, "call": "setBasePrice" },
+    { "name": "Case 4", "points": 1, "call": "costFullPrice" },
+    { "name": "Case 5", "points": 1, "call": "costSenior" },
+    { "name": "Case 6", "points": 1, "call": "costFollowsThePassenger" },
+    { "name": "Case 7", "points": 1, "call": "costFollowsThePassengerBack" },
+    { "name": "Case 8", "points": 1, "call": "toStringFullPrice" },
+    { "name": "Case 9", "points": 1, "call": "toStringRoundsTheCost" },
+    { "name": "Case 10", "points": 1, "call": "toStringAfterChanges" }
+  ]
+}

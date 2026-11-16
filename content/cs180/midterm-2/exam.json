@@ -1,0 +1,5 @@
+{
+  "title": "Midterm 2",
+  "minutes": 60,
+  "instructions": "Ten questions. Most ask you to complete a class; a few are whole programs in `Main.java`. Where a question gives a read-only `Main.java`, you can Run it to try your code.\n\nPrint and return exactly what each question asks: spelling, spaces, capital letters and punctuation all count. In a sample run, what the user types is shown in [brackets].\n\nThe reference sheet below each question lists the methods you may use."
+}

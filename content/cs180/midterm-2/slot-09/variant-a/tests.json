@@ -1,0 +1,20 @@
+{
+  "kind": "harness",
+  "timeLimitMs": 5000,
+  "cases": [
+    { "name": "Sample from the handout", "points": 0, "sample": true, "call": "sampleFromTheHandout" },
+    { "name": "Case 1", "points": 1, "call": "hours" },
+    { "name": "Case 2", "points": 1, "call": "labelFromParcel" },
+    { "name": "Case 3", "points": 1, "call": "cost" },
+    { "name": "Case 4", "points": 1, "call": "costOfNothing" },
+    { "name": "Case 5", "points": 1, "call": "description" },
+    { "name": "Case 6", "points": 1, "call": "costAsAParcel" },
+    { "name": "Case 7", "points": 1, "call": "descriptionAsAParcel" },
+    { "name": "Case 8", "points": 1, "call": "oneNewPrivateField" },
+    { "name": "Case 9", "points": 1, "call": "otherParcelCost", "against": "other-parcel" },
+    { "name": "Case 10", "points": 1, "call": "otherParcelDescription", "against": "other-parcel" },
+    { "name": "Case 11", "points": 1, "call": "otherParcelCostOfNothing", "against": "other-parcel" },
+    { "name": "Case 12", "points": 1, "call": "otherParcelAsAParcel", "against": "other-parcel" },
+    { "name": "Case 13", "points": 1, "call": "otherParcelCostAsAParcel", "against": "other-parcel" }
+  ]
+}

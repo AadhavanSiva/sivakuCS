@@ -1,0 +1,13 @@
+{
+  "title": "Ledger",
+  "points": 9,
+  "editable": [
+    "Ledger.java"
+  ],
+  "readOnly": [
+    "Main.java",
+    "Transaction.java",
+    "Purchase.java",
+    "Refund.java"
+  ]
+}

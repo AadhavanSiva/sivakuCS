@@ -1,0 +1,11 @@
+{
+  "title": "Ferry ticket",
+  "points": 10,
+  "editable": [
+    "Ticket.java"
+  ],
+  "readOnly": [
+    "Main.java",
+    "Passenger.java"
+  ]
+}

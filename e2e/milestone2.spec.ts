@@ -9,6 +9,7 @@ import {
   examDirs,
   loadBrokenVariants,
   loadExam,
+  loadQuestion,
   loadSolution,
   questionDirs,
 } from "../lib/content/load";
@@ -80,6 +81,28 @@ test("the browser grades every exam's reference solutions exactly as the local J
   } finally {
     await local.close();
   }
+});
+
+// java.lang.IO buffers System.in for the life of the JVM: input a crashed
+// run left unread must not be read by the next case's run.
+test("a run that crashes does not leave its input for the next case", async ({ page }) => {
+  test.setTimeout(5 * 60_000);
+  const dir = join(CONTENT_ROOT, "cs180", "midterm-2", "slot-07", "variant-a");
+  const question = loadQuestion(dir);
+  const files = loadBrokenVariants(dir)["broken/no-catch"];
+  const expected = ["Case 2", "Case 6", "Case 7", "Case 8", "Case 9", "Case 10", "Case 11"];
+  const failed = (r: GradeResult) => r.cases.filter((c) => !c.passed).map((c) => c.name);
+
+  const local = new LocalJava();
+  try {
+    expect(failed(await gradeQuestion(local, question, files)), "local JDK").toEqual(expected);
+  } finally {
+    await local.close();
+  }
+  await page.goto("/lab/grade");
+  await expect(page.getByTestId("status")).toHaveAttribute("data-status", "ready", { timeout: JVM_START_TIMEOUT });
+  const browser = await page.evaluate(([q, f]) => window.sivakuGrade!(q, f), [question, files] as const);
+  expect(failed(browser), "browser").toEqual(expected);
 });
 
 test("Test shows the header, the sample's reason, and only pass or fail for hidden cases", async ({ page }) => {

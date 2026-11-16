@@ -1,0 +1,10 @@
+{
+  "title": "Booking",
+  "points": 9,
+  "editable": [
+    "Booking.java"
+  ],
+  "readOnly": [
+    "Main.java"
+  ]
+}

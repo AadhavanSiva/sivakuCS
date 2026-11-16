@@ -1,0 +1,15 @@
+{
+  "kind": "harness",
+  "timeLimitMs": 5000,
+  "cases": [
+    { "name": "Sample from the handout", "points": 0, "sample": true, "call": "sampleFromTheHandout" },
+    { "name": "Case 1", "points": 1, "call": "name" },
+    { "name": "Case 2", "points": 1, "call": "height" },
+    { "name": "Case 3", "points": 1, "call": "setter" },
+    { "name": "Case 4", "points": 1, "call": "readyAtExactly15" },
+    { "name": "Case 5", "points": 1, "call": "notReadyAt14" },
+    { "name": "Case 6", "points": 1, "call": "readyFollowsTheSetter" },
+    { "name": "Case 7", "points": 1, "call": "countsEveryObject" },
+    { "name": "Case 8", "points": 1, "call": "fieldsArePrivate" }
+  ]
+}
