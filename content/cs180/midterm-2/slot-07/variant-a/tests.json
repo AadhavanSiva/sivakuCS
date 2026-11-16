@@ -3,18 +3,18 @@
   "timeLimitMs": 5000,
   "cases": [
     {
-      "name": "Sample from the handout", "points": 0, "sample": true, "stdin": "45\n12\n",
-      "labelledLines": [
-        { "prefix": "Invalid: ", "lines": ["Invalid: not from 1 to 40"] },
-        { "prefix": "Table: ", "lines": ["Table: 12"] },
-        { "prefix": "Attempts: ", "lines": ["Attempts: 2"] }
-      ]
-    },
-    {
-      "name": "Case 1", "points": 1, "stdin": "12\n",
+      "name": "Sample from the handout", "points": 0, "sample": true, "stdin": "12\n",
       "labelledLines": [
         { "prefix": "Invalid: ", "lines": [] },
         { "prefix": "Table: ", "lines": ["Table: 12"] },
+        { "prefix": "Attempts: ", "lines": ["Attempts: 1"] }
+      ]
+    },
+    {
+      "name": "Case 1", "points": 1, "stdin": "27\n",
+      "labelledLines": [
+        { "prefix": "Invalid: ", "lines": [] },
+        { "prefix": "Table: ", "lines": ["Table: 27"] },
         { "prefix": "Attempts: ", "lines": ["Attempts: 1"] }
       ]
     },

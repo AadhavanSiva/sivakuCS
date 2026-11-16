@@ -4,10 +4,9 @@
 `Fleet.java`:
 
 - `describe(Rental r)` returns a description chosen by the kind of rental:
-  - a bike: `Bike `, its id, ` with `, its gears and ` gears`, as in `Bike B7 with 21 gears`;
-  - a scooter: `Scooter `, its id, ` at $`, its hourly rate to two decimals and ` an hour`, as in
-    `Scooter S2 at $3.50 an hour`;
-  - any other rental: `Rental ` and its id, as in `Rental T1`.
+  - a bike: its id and gears, as in `Bike B7 with 21 gears`;
+  - a scooter: its id and hourly rate to two decimals, as in `Scooter S2 at $3.50 an hour`;
+  - any other rental: its id, as in `Rental T1`.
 - `countScooters(Rental[] items)` returns how many of the rentals are scooters.
 
 `Main.java` is read-only. Run it to try your class.

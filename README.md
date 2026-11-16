@@ -3,12 +3,13 @@
 Practice exams for Purdue CS 18000 (Java) that look, run and score like the
 real ones on Ed. Java compiles and runs entirely in the student's browser.
 
-**Status:** Milestones 1 to 3 of 5 are done: Java 25 runs in the browser,
-questions are graded by the same code in the browser and in `npm run
-verify`, and a full exam can be sat at `/exams`, timed or not, with results
-after Submit. Milestone 4 (accounts: Google sign-in, My attempts) is built
-and tested, and goes live once Google sign-in and the Neon database are set
-up ([Accounts](#accounts)). The two practice exams come next.
+**Status:** Milestones 1 to 4 are done and live: Java 25 runs in the
+browser, questions are graded by the same code in the browser and in `npm
+run verify`, a full exam can be sat at `/exams`, timed or not, and attempts
+are kept in the student's account ([Accounts](#accounts)). Milestone 5's two
+exams, Midterm 1 and Midterm 2, are written (one variant per question so far)
+and pass `npm run verify`; they wait for the owner to sit both, timed, and
+sign off.
 
 Unofficial practice. Not affiliated with Purdue University or Ed.
 

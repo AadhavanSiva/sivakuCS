@@ -6,7 +6,8 @@ within a set number of hours.
 - The constructor takes a label, a weight in kilograms and a number of hours.
 - A private field holds the number of hours, which `getHours()` returns.
 - `getShippingCost()` returns the parcel's shipping cost plus 12.00.
-- `toString()` returns the parcel's description followed by ` express within `, the number of hours and ` hours`.
+- `toString()` returns the parcel's description and the hours, as in
+  `Parcel Books (2.0 kg) express within 24 hours`.
 
 `Main.java` is read-only. Run it to try your class.
 

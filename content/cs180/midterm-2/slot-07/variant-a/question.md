@@ -13,12 +13,9 @@ times the user was asked. The program must not crash, whatever is typed.
 
 ```
 Enter a table number:
-[45]
-Invalid: not from 1 to 40
-Enter a table number:
 [12]
 Table: 12
-Attempts: 2
+Attempts: 1
 ```
 
 The sample run is one of the tests. The rest are hidden.

@@ -4,10 +4,9 @@ Each line of `temperatures.txt` holds one whole number, which may be negative. T
 
 Write a program that reads `temperatures.txt` and writes `summary.txt` with four lines: the number of readings,
 their average to two decimals, the lowest reading, and how many readings are below zero, as in the sample.
-Otherwise the program prints nothing.
 
-If `temperatures.txt` does not exist, print `Could not open temperatures.txt` and write no file. The program must
-not crash.
+If `temperatures.txt` does not exist, print `Could not open temperatures.txt` and write no file; otherwise print
+nothing. The program must not crash.
 
 ## Sample run
 
