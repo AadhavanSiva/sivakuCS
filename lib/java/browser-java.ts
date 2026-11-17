@@ -28,10 +28,17 @@ export const BROWSER_PATHS: SandboxPaths = {
   pathSeparator: ":",
 };
 
-/** A cold start is 5 to 10 s on a good connection; this allows for a slow one. */
-export const DEFAULT_START_TIMEOUT_MS = 60_000;
-/** Attempts before giving up and waiting for retry(). */
-const AUTOMATIC_ATTEMPTS = 2;
+/**
+ * How long to wait for an attempt before starting another alongside it.
+ * Measured cold starts: median 7 to 9 s, slowest about 30 s (README); an
+ * attempt that stalls never finishes, so a second one 20 s in recovers
+ * where waiting would not, and the first keeps going in case it is only slow.
+ */
+export const DEFAULT_START_TIMEOUT_MS = 20_000;
+/** Attempts running at once, at most, before giving up and waiting for retry(). */
+const AUTOMATIC_ATTEMPTS = 3;
+/** The newest attempt then gets this many more start timeouts (60 s) to finish. */
+const LAST_WINDOW = 3;
 
 export type JavaStatus = "starting" | "ready" | "compiling" | "running" | "failed";
 
@@ -77,36 +84,111 @@ export class BrowserJava implements JavaBackend {
   private attemptsSinceReady = 0;
   private ready = false;
   private failed = false;
+  /** Start attempts in progress (none ready yet); the first ready becomes `worker`. */
+  private attempts: Worker[] = [];
+  /** The last start-up step each attempt reported (the worker's "phase" messages). */
+  private readonly phases = new Map<Worker, string>();
+  /** The last attempt has been started and is in its final window. */
+  private lastWindow = false;
 
   constructor(events: BrowserJavaEvents = {}, options: { startTimeoutMs?: number } = {}) {
     this.events = events;
     this.startTimeoutMs = options.startTimeoutMs ?? DEFAULT_START_TIMEOUT_MS;
   }
 
-  /** Starts the JVM if it is not running. */
+  /** Starts the JVM if it is not running or starting. */
   start(): void {
-    if (this.worker || this.failed) return;
+    if (this.worker || this.attempts.length > 0 || this.failed) return;
     this.startedAt = performance.now();
     this.ready = false;
+    this.events.onStatus?.("starting");
+    this.launchAttempt();
+  }
+
+  /**
+   * One start attempt, alongside any still in progress: a start that is
+   * only slow keeps going, and whichever attempt is ready first is kept
+   * (measured: cold starts take 5 to 30 s, and an attempt that stalls never
+   * recovers; see the README).
+   */
+  private launchAttempt(): void {
     this.attempt++;
     this.attemptsSinceReady++;
     this.events.onAttempt?.(this.attempt);
-    this.events.onStatus?.("starting");
     const worker = new Worker(WORKER_URL);
-    worker.onmessage = (event: MessageEvent) => {
-      if (this.worker === worker) this.handle(event.data);
-    };
-    worker.onerror = (event) => {
-      if (this.worker === worker) this.startFailed(event.message || "The Java runtime failed to load.");
-    };
-    this.worker = worker;
-    const limit = this.startTimeoutMs * this.attemptsSinceReady;
-    this.startTimer = setTimeout(
-      () => this.startFailed(`Java did not start within ${limit / 1000} seconds.`),
-      limit,
-    );
-    // Calls made while an earlier attempt stalled were never run; send them again.
+    this.attempts.push(worker);
+    this.phases.set(worker, "none");
+    worker.onmessage = (event: MessageEvent) => this.fromWorker(worker, event.data);
+    worker.onerror = (event) => this.attemptFailed(worker, event.message || "The Java runtime failed to load.");
+    // Calls made before Java was ready wait in each attempt; only the one kept runs them.
     for (const call of this.pending.values()) worker.postMessage(call.message);
+    clearTimeout(this.startTimer);
+    this.startTimer = setTimeout(() => this.notReadyYet(), this.startTimeoutMs);
+  }
+
+  /** No attempt is ready after another startTimeoutMs: start one more alongside, or, after the last, give up. */
+  private notReadyYet(): void {
+    const waited = Math.round((performance.now() - this.startedAt) / 1000);
+    const where = [...this.phases.values()].join(", ");
+    if (this.attemptsSinceReady < AUTOMATIC_ATTEMPTS) {
+      console.warn(`Java did not start within ${waited} seconds (last steps: ${where}). Starting another attempt alongside.`);
+      this.launchAttempt();
+      return;
+    }
+    if (!this.lastWindow) {
+      // The newest attempt gets as long as a slow cold start needs.
+      this.lastWindow = true;
+      this.startTimer = setTimeout(() => this.notReadyYet(), this.startTimeoutMs * LAST_WINDOW);
+      return;
+    }
+    this.giveUp(`Java did not start within ${waited} seconds (last steps: ${where}).`);
+  }
+
+  private fromWorker(worker: Worker, message: { type: string; [key: string]: unknown }): void {
+    if (message.type === "phase") {
+      this.phases.set(worker, `${message.name} at ${message.ms} ms`);
+      return;
+    }
+    if (message.type === "ready" && this.attempts.includes(worker)) {
+      // The first attempt ready is kept; the others are stopped before they run any call.
+      for (const other of this.attempts) if (other !== worker) other.terminate();
+      this.attempts = [];
+      this.phases.clear();
+      this.lastWindow = false;
+      this.worker = worker;
+    }
+    if (message.type === "fatal" && this.attempts.includes(worker)) {
+      this.attemptFailed(worker, String(message.message));
+      return;
+    }
+    if (this.worker === worker) this.handle(message);
+  }
+
+  /** An attempt failed outright: drop it; if none is left, start another or give up. */
+  private attemptFailed(worker: Worker, message: string): void {
+    if (!this.attempts.includes(worker)) return;
+    worker.terminate();
+    this.attempts = this.attempts.filter((w) => w !== worker);
+    this.phases.delete(worker);
+    if (this.attempts.length > 0) return;
+    if (this.attemptsSinceReady < AUTOMATIC_ATTEMPTS) {
+      console.warn(`${message} Trying again.`);
+      this.launchAttempt();
+      return;
+    }
+    this.giveUp(message);
+  }
+
+  /** Every attempt failed or stalled: stop them all and wait for retry(). */
+  private giveUp(message: string): void {
+    clearTimeout(this.startTimer);
+    for (const w of this.attempts) w.terminate();
+    this.attempts = [];
+    this.phases.clear();
+    this.lastWindow = false;
+    this.failed = true;
+    this.events.onStatus?.("failed");
+    this.rejectAll(() => new Error(`Java could not start: ${message}`));
   }
 
   /** After start-up failed: try again. */
@@ -129,7 +211,8 @@ export class BrowserJava implements JavaBackend {
     const message = { id, method, args };
     return new Promise((resolve, reject) => {
       this.pending.set(id, { message, resolve, reject, options, started: false });
-      this.worker!.postMessage(message);
+      // Ready: to the JVM. Still starting: to every attempt, as only the one kept will run it.
+      for (const w of this.worker ? [this.worker] : this.attempts) w.postMessage(message);
     });
   }
 
@@ -148,6 +231,8 @@ export class BrowserJava implements JavaBackend {
     clearTimeout(this.startTimer);
     this.worker?.terminate();
     this.worker = null;
+    for (const w of this.attempts) w.terminate();
+    this.attempts = [];
     this.rejectAll(() => new JavaStoppedError());
   }
 
@@ -165,21 +250,6 @@ export class BrowserJava implements JavaBackend {
       call.reject(errorFor(id));
     }
     this.pending.clear();
-  }
-
-  /** The JVM failed or stalled before it was ready: try again, or give up. */
-  private startFailed(message: string): void {
-    clearTimeout(this.startTimer);
-    this.worker?.terminate();
-    this.worker = null;
-    if (this.attemptsSinceReady < AUTOMATIC_ATTEMPTS) {
-      console.warn(`${message} Trying again.`);
-      this.start();
-      return;
-    }
-    this.failed = true;
-    this.events.onStatus?.("failed");
-    this.rejectAll(() => new Error(`Java could not start: ${message}`));
   }
 
   private settle(id: number): Pending | undefined {
@@ -222,7 +292,7 @@ export class BrowserJava implements JavaBackend {
         this.events.onWarm?.(message.ms as number);
         return;
       case "fatal":
-        this.startFailed(String(message.message));
+        this.giveUp(String(message.message));
         return;
     }
 
@@ -239,7 +309,7 @@ export class BrowserJava implements JavaBackend {
         }
         return;
       case "output":
-        call.options.onOutput?.(message.stream as "out" | "err", String(message.text));
+        call.options.onOutput?.(message.stream as "out" | "err" | "ui", String(message.text));
         return;
       case "input-wait":
         // Time spent waiting for the student to type does not count.

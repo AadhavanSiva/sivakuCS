@@ -1,0 +1,12 @@
+{
+  "kind": "junit",
+  "testClass": "QuizScoresTest",
+  "timeLimitMs": 10000,
+  "cases": [
+    { "name": "Your tests pass on a correct QuizScoreList", "points": 2, "sample": true, "implementation": "correct", "expect": "pass" },
+    { "name": "Bug 1 caught: an empty list", "points": 3, "implementation": "empty", "expect": "catch" },
+    { "name": "Bug 2 caught: a boundary", "points": 3, "implementation": "boundary", "expect": "catch" },
+    { "name": "Bug 3 caught: invalid input", "points": 3, "implementation": "invalid", "expect": "catch" },
+    { "name": "Bug 4 caught: a computed value", "points": 3, "implementation": "average", "expect": "catch" }
+  ]
+}

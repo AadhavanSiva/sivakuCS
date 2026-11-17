@@ -11,6 +11,8 @@ export type RunResult = {
   stderr: string;
   stdoutTruncated: boolean;
   stderrTruncated: boolean;
+  /** Why the run looks like it failed inside CheerpJ rather than in the student's code, or null. */
+  runtimeFault?: string | null;
   ms: number;
 };
 
@@ -23,6 +25,8 @@ export type RunRequest = {
   mainClass?: string;
   /** Limit on the program's own running time; compiling does not count. */
   timeLimitMs?: number;
+  /** Sandbox run options (see runOptions in lib/grading/grade.ts): Swing fakes, a warm-up. */
+  options?: string;
 };
 
 export type RunOutcome =
@@ -65,12 +69,15 @@ export async function writeFiles(java: JavaBackend, dir: string, files: JavaFile
   }
 }
 
-/** Compiles `files` into the sandbox's class directory. */
-export async function compileFiles(java: JavaBackend, files: JavaFiles): Promise<CompileResult> {
+/** Compiles `files` into the sandbox's class directory, with anything else they need on `classPath`. */
+export async function compileFiles(java: JavaBackend, files: JavaFiles, classPath: string[] = []): Promise<CompileResult> {
   const dirs = sandboxDirs(java.paths);
   await writeFiles(java, dirs.src, files);
   await java.call("reset", [dirs.classes]);
-  return JSON.parse((await java.call("compile", [dirs.src, dirs.classes], { activity: "compiling" }))!);
+  const call = classPath.length
+    ? java.call("compileWith", [dirs.src, dirs.classes, classPath.join(java.paths.pathSeparator)], { activity: "compiling" })
+    : java.call("compile", [dirs.src, dirs.classes], { activity: "compiling" });
+  return JSON.parse((await call)!);
 }
 
 /** Empties the working directory (keeping the sandbox's own files) and seeds it. */
@@ -94,8 +101,9 @@ export async function runCompiled(
   mainClass: string,
   stdin: string,
   timeLimitMs: number,
+  options = "",
 ): Promise<RunResult> {
-  const json = await java.call("run", [classPath, mainClass, stdin], { activity: "running", timeoutMs: timeLimitMs });
+  const json = await java.call("runWith", [classPath, mainClass, stdin, options], { activity: "running", timeoutMs: timeLimitMs });
   return JSON.parse(json!);
 }
 
@@ -112,6 +120,7 @@ export async function runProgram(java: JavaBackend, request: RunRequest): Promis
       request.mainClass ?? "Main",
       request.stdin ?? "",
       timeLimitMs,
+      request.options,
     );
     const files = await readWorkDir(java);
     const { ms, ...output } = run;
@@ -132,7 +141,7 @@ export type InteractiveOutcome =
 
 export type ConsoleIO = {
   /** Output as the program writes it. */
-  onOutput: (stream: "out" | "err", text: string) => void;
+  onOutput: (stream: "out" | "err" | "ui", text: string) => void;
   /** The program is (or is no longer) waiting for a typed line. */
   onWaitingForInput: (waiting: boolean) => void;
 };
@@ -153,7 +162,7 @@ export async function runInteractively(
     const compile = await compileFiles(java, request.files);
     if (!compile.ok) return { kind: "compile-error", output: compile.output, compileMs: compile.ms };
     await prepareWorkDir(java, request.inputFiles ?? {});
-    const json = await java.call("runInteractive", [sandboxDirs(java.paths).classes, request.mainClass ?? "Main"], {
+    const json = await java.call("runInteractiveWith", [sandboxDirs(java.paths).classes, request.mainClass ?? "Main", request.options ?? ""], {
       activity: "running",
       timeoutMs: timeLimitMs,
       onOutput: io.onOutput,

@@ -6,7 +6,7 @@ import { StartingJava } from "@/components/StartingJava";
 import { Testcases } from "@/components/Testcases";
 import type { ApiMember } from "@/lib/autocomplete/reference-api";
 import type { Checkpoint } from "@/lib/attempt-storage";
-import { filesToCompile, gradeQuestion } from "@/lib/grading/grade";
+import { filesToCompile, gradeQuestion, runOptions } from "@/lib/grading/grade";
 import type { GradeResult, Question } from "@/lib/grading/types";
 import { getJava, preloadJava, useJavaRuntime } from "@/lib/java-runtime";
 import type { JavaFiles } from "@/lib/java/programs";
@@ -256,7 +256,15 @@ export function QuestionSlide(props: Props) {
             </div>
           </div>
           <div className="min-h-0 flex-1">
-            <RunConsole ref={runConsole} files={compileSet} inputFiles={dataFiles} mainClass={mainClass} onRunningChange={setRunning} />
+            <RunConsole
+              ref={runConsole}
+              files={compileSet}
+              inputFiles={dataFiles}
+              mainClass={mainClass}
+              options={runOptions(question)}
+              swingPanel={meta.swingPanel}
+              onRunningChange={setRunning}
+            />
           </div>
         </div>
       </section>

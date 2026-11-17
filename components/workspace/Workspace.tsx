@@ -259,8 +259,8 @@ export function Workspace({ exam, userId }: { exam: Exam; userId: string }) {
             attemptId={attempt.id}
             question={question}
             number={slide}
-            referenceHtml={exam.referenceHtml ?? ""}
-            referenceApi={exam.referenceApi ?? []}
+            referenceHtml={question.referenceHtml ?? exam.referenceHtml ?? ""}
+            referenceApi={question.referenceApi ?? exam.referenceApi ?? []}
             studentFiles={filesOf(question.id)}
             checkpoint={attempt.checkpoints[question.id]}
             submitted={

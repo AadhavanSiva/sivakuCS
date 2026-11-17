@@ -21,6 +21,7 @@ import {
 import { gradeQuestion } from "../lib/grading/grade";
 import type { GradeResult, Question } from "../lib/grading/types";
 import { LocalJava, localJavaMajor } from "./lib/local-java";
+import { realJunitOutcomes } from "./lib/real-junit";
 
 const filter = process.argv[2]?.replace(/\\/g, "/");
 
@@ -42,8 +43,8 @@ function checkQuestion(dir: string, question: Question, problems: Problems) {
     if (!existsSync(join(dir, file))) problems.push(`${file} is missing`);
   }
   if (!meta.title) problems.push("meta.json: needs a title");
-  if (!Number.isInteger(meta.points) || meta.points < 4 || meta.points > 16) {
-    problems.push(`meta.json: points is ${meta.points}; a question is worth 4 to 16`);
+  if (!Number.isInteger(meta.points) || meta.points < 4 || meta.points > 18) {
+    problems.push(`meta.json: points is ${meta.points}; a question is worth 4 to 18`);
   }
   if (!Array.isArray(meta.editable) || meta.editable.length === 0) problems.push("meta.json: editable lists no files");
   if (!Array.isArray(meta.readOnly)) problems.push("meta.json: readOnly must be a list (it may be empty)");
@@ -72,7 +73,7 @@ function checkQuestion(dir: string, question: Question, problems: Problems) {
     if (meta.editable?.includes(name)) problems.push(`${name} is both editable and given`);
   }
 
-  if (!["stdio", "files", "harness"].includes(tests.kind)) problems.push(`tests.json: unknown kind "${tests.kind}"`);
+  if (!["stdio", "files", "harness", "junit"].includes(tests.kind)) problems.push(`tests.json: unknown kind "${tests.kind}"`);
   const cases = tests.cases ?? [];
   // Names are free-form ("Sample run from the handout: the Count line",
   // "Case 1.2"); "sample": true marks the cases whose failures say why.
@@ -102,7 +103,21 @@ function checkQuestion(dir: string, question: Question, problems: Problems) {
       problems.push(`tests.json: ${c.name} checks neither files nor output`);
     }
     if (tests.kind === "harness" && !c.call) problems.push(`tests.json: ${c.name} has no "call"`);
+    if (tests.kind === "junit") {
+      if (!c.implementation || !question.implementations?.[c.implementation]) {
+        problems.push(`tests.json: ${c.name} needs an implementation in implementations/`);
+      }
+      if (c.expect !== "pass" && c.expect !== "catch") problems.push(`tests.json: ${c.name} needs "expect": "pass" or "catch"`);
+    }
   });
+  if (tests.kind === "junit") {
+    if (!tests.testClass) problems.push("tests.json: a junit question needs testClass");
+    if (!cases.some((c) => c.expect === "pass")) problems.push("tests.json: a junit question needs a pass-on-correct case");
+  }
+  if (meta.reference && !question.reference) problems.push(`meta.json: reference sheet sheets/${meta.reference}.md is missing`);
+  if (meta.warmUp && !(`${meta.warmUp}.java` in (question.helpers ?? {}))) {
+    problems.push(`helpers/${meta.warmUp}.java is missing (meta.json warmUp)`);
+  }
   const casePoints = cases.reduce((sum, c) => sum + c.points, 0);
   if (casePoints !== meta.points) problems.push(`tests.json: cases are worth ${casePoints}, but meta.json says ${meta.points}`);
   if (tests.kind === "harness" && Object.keys(question.harness).length === 0) problems.push("harness/ is empty");
@@ -161,6 +176,12 @@ async function main() {
         if (problems.length === 0) {
           const solution = await gradeQuestion(java, question, loadSolution(dir));
           if (solution.passed !== solution.total) problems.push(`solution/ fails:\n${indent(describe(solution))}`);
+          if (question.tests.kind === "junit") {
+            // The starter is one test that passes on the correct class and catches nothing.
+            const starter = await gradeQuestion(java, question, question.starter);
+            const passPoints = question.tests.cases.filter((c) => c.expect === "pass").reduce((sum, c) => sum + c.points, 0);
+            if (starter.score !== passPoints) problems.push(`starter/ scores ${starter.score}; it must score exactly ${passPoints}`);
+          }
 
           const variants = loadBrokenVariants(dir);
           if (Object.keys(variants).length === 0) problems.push("broken/ has no deliberately wrong solution");
@@ -170,6 +191,17 @@ async function main() {
             const broken = await gradeQuestion(java, question, files);
             const hiddenFailed = broken.cases.some((c) => !c.sample && !c.passed);
             if (!hiddenFailed) problems.push(`${name}/ passes every hidden case; it must fail at least one`);
+          }
+          // The small JUnit runner must score every suite as real JUnit does.
+          if (question.tests.kind === "junit") {
+            const suites = { solution: loadSolution(dir), starter: question.starter, ...variants };
+            for (const [name, files] of Object.entries(suites)) {
+              const small = (await gradeQuestion(java, question, files)).cases.map((c) => c.passed);
+              const real = await realJunitOutcomes(question, files);
+              if (JSON.stringify(small) !== JSON.stringify(real)) {
+                problems.push(`${name}: the small runner and real JUnit disagree (small ${JSON.stringify(small)}, JUnit ${JSON.stringify(real)})`);
+              }
+            }
           }
         }
 

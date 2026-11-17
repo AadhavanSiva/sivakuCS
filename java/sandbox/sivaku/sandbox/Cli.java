@@ -66,7 +66,10 @@ public final class Cli {
             case "compile/2" -> Sandbox.compile(a[0], a[1]);
             case "compileWith/3" -> Sandbox.compileWith(a[0], a[1], a[2]);
             case "run/3" -> Sandbox.run(a[0], a[1], a[2]);
+            case "runWith/4" -> Sandbox.runWith(a[0], a[1], a[2], a[3]);
             case "callHarness/3" -> Sandbox.callHarness(a[0], a[1], a[2]);
+            case "callHarnessWith/4" -> Sandbox.callHarnessWith(a[0], a[1], a[2], a[3]);
+            case "runTests/3" -> Sandbox.runTests(a[0], a[1], a[2]);
             default -> throw new IllegalArgumentException("Unknown request: " + method + " with " + a.length + " arguments");
         };
     }

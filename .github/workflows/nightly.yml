@@ -1,0 +1,97 @@
+name: Nightly
+
+# Slow checks about CheerpJ rather than this site's code, so they run once a
+# night instead of on every push (ci.yml):
+# - the Midterm 3 proofs (e2e/m3-proofs.spec.ts): threads, sockets, real
+#   JUnit and Swing in CheerpJ, with timings;
+# - how often CheerpJ fails to start, against a production build
+#   (scripts/measure-startup.mjs).
+# Both keep their numbers as an artifact.
+
+on:
+  schedule:
+    - cron: "41 5 * * *"
+  workflow_dispatch:
+  # A one-off measurement can be run by pushing a branch named ci-measure/<anything>.
+  push:
+    branches: ["ci-measure/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  proofs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Midterm 3 proofs
+        run: npx playwright test e2e/m3-proofs.spec.ts
+        env:
+          SIVAKU_NIGHTLY: "1"
+
+      - name: Keep the numbers
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: m3-proofs
+          path: test-results/m3-proofs.json
+          retention-days: 30
+
+  startup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Production build
+        run: npm run build
+
+      # Not secrets: values for this local server only, which serves the public
+      # privacy page the measurement starts Java from.
+      - name: Measure CheerpJ start-up against the production build
+        env:
+          AUTH_SECRET: nightly-only-value-not-a-secret-0123456789abcdef
+          AUTH_GOOGLE_ID: nightly-not-used
+          AUTH_GOOGLE_SECRET: nightly-not-used
+          DATABASE_URL: postgresql://nobody:nothing@127.0.0.1:1/none
+        run: |
+          npm start &
+          for i in $(seq 1 120); do curl -sf -o /dev/null http://localhost:3000/privacy && break; sleep 1; done
+          node scripts/measure-startup.mjs http://localhost:3000 --runs 30 --label ci-production
+
+      - name: Keep the numbers
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: startup
+          path: test-results/startup-*.json
+          retention-days: 30

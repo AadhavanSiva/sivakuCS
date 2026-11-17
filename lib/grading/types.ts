@@ -1,12 +1,13 @@
 // The question format (content/<course>/<exam>/<nn-slug>/) and grading results.
+import type { ApiMember } from "../autocomplete/reference-api";
 import type { JavaFiles } from "../java/programs";
 
-export type TestKind = "stdio" | "files" | "harness";
+export type TestKind = "stdio" | "files" | "harness" | "junit";
 
 /** meta.json */
 export type QuestionMeta = {
   title: string;
-  /** Sum of the case points; 4 to 16 per question (the midterms' range), 100 per exam. */
+  /** Sum of the case points; 4 to 18 per question (the midterms' range), 100 per exam. */
   points: number;
   /** Files the student edits; their starting text is in starter/. */
   editable: string[];
@@ -16,6 +17,21 @@ export type QuestionMeta = {
   mainClass?: string;
   /** Harness tests: the class in harness/ whose methods are the cases. Default "Harness". */
   harnessClass?: string;
+  /**
+   * A Swing question: the student's panel class. Its JPanel, JButton,
+   * JLabel and JTextField are replaced by the sandbox's fakes for Test, and
+   * Run draws the panel as HTML instead of running main (sivaku.swing).
+   */
+  swingPanel?: string;
+  /**
+   * A thread question: a class in helpers/ whose static warmUp() runs the
+   * student's methods once on one thread before Run and before each test.
+   * CheerpJ can kill a thread the first time several threads start the same
+   * code together (java/proofs/m3/threads).
+   */
+  warmUp?: string;
+  /** The reference sheet for this question alone: sheets/<name>.md in the exam's folder. */
+  reference?: string;
 };
 
 /**
@@ -59,6 +75,14 @@ export type TestCase = {
    * class written differently, to show the student's subclass calls super.
    */
   against?: string;
+  /**
+   * junit: the hidden implementation (a folder in implementations/) the
+   * student's test class runs against, and what it should do there: "pass"
+   * (every test passes: the correct implementation) or "catch" (at least one
+   * test fails: a buggy one). If a "pass" case fails, every case scores 0.
+   */
+  implementation?: string;
+  expect?: "pass" | "catch";
 };
 
 /** The lines of the output that start with `prefix`, in order. */
@@ -69,6 +93,8 @@ export type TestsFile = {
   kind: TestKind;
   /** Per case, the program's own running time. Default 5000. */
   timeLimitMs?: number;
+  /** junit: the student's test class, run by the sandbox's small JUnit 5 runner. */
+  testClass?: string;
   cases: TestCase[];
 };
 
@@ -93,6 +119,12 @@ export type Question = {
   helpers?: JavaFiles;
   /** alternates/<name>/: other versions of given files, for cases with `against`. */
   alternates?: Record<string, JavaFiles>;
+  /** junit: implementations/<name>/, the hidden classes the student's tests run against. */
+  implementations?: Record<string, JavaFiles>;
+  /** The question's own reference sheet (meta.reference), when it has one instead of the exam's. */
+  reference?: string;
+  referenceHtml?: string;
+  referenceApi?: ApiMember[];
   tests: TestsFile;
 };
 

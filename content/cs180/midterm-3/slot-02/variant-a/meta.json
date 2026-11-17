@@ -1,0 +1,8 @@
+{
+  "title": "Seed bank",
+  "points": 12,
+  "editable": ["SeedBank.java"],
+  "readOnly": ["Main.java", "Tally.java", "MemoryTally.java"],
+  "warmUp": "Warmup",
+  "reference": "threads"
+}

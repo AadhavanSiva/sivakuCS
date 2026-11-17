@@ -1,0 +1,8 @@
+{
+  "title": "Peak reading",
+  "points": 18,
+  "editable": ["PeakWorker.java", "Peak.java"],
+  "readOnly": ["Main.java", "Readings.java", "SensorReadings.java"],
+  "warmUp": "Warmup",
+  "reference": "threads"
+}

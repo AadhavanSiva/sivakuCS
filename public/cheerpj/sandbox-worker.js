@@ -10,7 +10,8 @@
 // Messages in:  { id, method, args }              one Sandbox call
 //               { type: "input", line }           a line typed into the Run
 //                                                 console (null: end of input)
-// Messages out: { type: "ready", info, ms }       JVM loaded
+// Messages out: { type: "phase", name, ms }        a start-up step done (see phase below)
+//               { type: "ready", info, ms }       JVM loaded
 //               { type: "warm", ms }              compiler warmed up
 //               { type: "fatal", message }        the JVM could not start
 //               { id, type: "started" }           the call began executing
@@ -19,7 +20,13 @@
 //               { id, type: "input-resumed" }     ... and got its line
 //               { id, type: "result", value }     its return value
 //               { id, type: "error", message }    it threw
+// Start-up steps, timed from when the worker began, so a start that stalls
+// says where: { type: "phase", name, ms }. Steps: loader, init, library, class.
+const workerStarted = performance.now();
+const phase = (name) => postMessage({ type: "phase", name, ms: Math.round(performance.now() - workerStarted) });
+
 importScripts("https://cjrtnc.leaningtech.com/5.0/loader.js");
+phase("loader");
 
 // The program's working directory. CheerpJ resolves java.io relative paths
 // (new PrintWriter("out.txt")) against /files/ whatever user.dir says, so
@@ -30,7 +37,8 @@ const OWN = ".sivaku";
 
 const METHODS = new Set([
   "info", "reset", "clearExcept", "writeFile", "readFile", "readTree",
-  "compile", "compileWith", "run", "runInteractive", "callHarness",
+  "compile", "compileWith", "run", "runWith", "runInteractive", "runInteractiveWith",
+  "callHarness", "callHarnessWith", "runTests",
 ]);
 
 let Sandbox;
@@ -63,8 +71,11 @@ const natives = {
 const ready = (async () => {
   const started = performance.now();
   await cheerpjInit({ version: 25, status: "none", javaProperties: [`user.dir=${WORK}`], natives });
+  phase("init");
   const lib = await cheerpjRunLibrary("/app/cheerpj/sandbox.jar");
+  phase("library");
   Sandbox = await lib.sivaku.sandbox.Sandbox;
+  phase("class");
   const info = JSON.parse(await Sandbox.info());
   postMessage({ type: "ready", info, ms: Math.round(performance.now() - started) });
 })();
@@ -157,7 +168,7 @@ onmessage = (event) => {
   queue = queue
     .then(async () => {
       if (!METHODS.has(method)) throw new Error(`Unknown sandbox method: ${method}`);
-      if (method === "runInteractive") interactiveId = id;
+      if (method === "runInteractive" || method === "runInteractiveWith") interactiveId = id;
       postMessage({ id, type: "started" });
       try {
         const value = await Sandbox[method](...args.map(String));
@@ -165,7 +176,7 @@ onmessage = (event) => {
       } finally {
         // Lines typed while the program compiled wait for it, as in a
         // terminal; whatever it never read is dropped when it ends.
-        if (method === "runInteractive") {
+        if (method === "runInteractive" || method === "runInteractiveWith") {
           typedAhead = [];
           waitingForLine = null;
         }

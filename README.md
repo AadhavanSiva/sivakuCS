@@ -198,12 +198,14 @@ handling and file paths.
 
 Before any Midterm 3 question, each way of grading was proved in CheerpJ
 (section 8 of the private exam specs), riskiest first. The proofs are Java
-programs in `java/proofs/m3/`; `npx playwright test e2e/m3-proofs.spec.ts`
-runs each on the local JDK and in the browser, checks it, and writes the
-numbers to `test-results/m3-proofs.json`. The JUnit jar it needs is
-downloaded (and checked against Maven Central) into the gitignored
-`public/m3-proof/` by `node scripts/fetch-junit.mjs`. Browser times below
-are from a Windows laptop.
+programs in `java/proofs/m3/`; `e2e/m3-proofs.spec.ts` runs each on the
+local JDK and in the browser, checks it, and writes the numbers to
+`test-results/m3-proofs.json`. They run nightly
+(`.github/workflows/nightly.yml`), not on every push; locally,
+`SIVAKU_NIGHTLY=1 npx playwright test e2e/m3-proofs.spec.ts`. The JUnit jar
+they need is downloaded (and checked against Maven Central) into the
+gitignored `public/m3-proof/` by `node scripts/fetch-junit.mjs`. Browser
+times below are from a Windows laptop.
 
 | Topic | In the browser | How it will be graded |
 |---|---|---|
@@ -211,6 +213,84 @@ are from a Windows laptop.
 | Sockets (E, F, G) | Real `ServerSocket`/`Socket` do not work (`UnsatisfiedLinkError` in the NIO socket code). The fallback works: the student's compiled `new Socket(...)` and `new ServerSocket(...)` are rewritten to in-memory fakes, and a handler is given a fake socket directly. A client, a thread-per-client server and a handler all behaved as on the JDK, in 25–60 ms each. | The fallback. The fakes pass an inert `SocketImpl` to `Socket`'s and `ServerSocket`'s protected constructors, so the real one is never created. |
 | JUnit (D) | Both work and score alike: the model suite 14, the starter 2, each bug caught by its own test with JUnit's messages. Real JUnit Platform (3.2 MB jar): first run 2.1 s (1.7 s of it loading JUnit), a second run 1.0 s. A small runner (`@Test` and the reference sheet's assertions): 72 ms, no download. | **The small runner**, about 20 times faster with nothing to download; real JUnit stays in the proof as the reference it must agree with. |
 | Swing (C) | Real Swing cannot start: CheerpJ runs in a Web Worker with no display, and Swing's look and feel needs AWT's toolkit (`NullPointerException` in `CheerpJDisplay`), headless or not. The fallback works: the student's panel class is loaded with `JPanel`, `JButton`, `JLabel` and `JTextField` renamed in its constant pool to small fakes built on AWT's `Component`; clicks, typed text, labels, disabled buttons, lambda and inner-class listeners all behave as with Swing. | The fallback. The fakes keep their own enabled flag, since `Component.setEnabled` checks focus, which starts the toolkit. On the JDK, `doClick()` holds the button for 68 ms; graders use `doClick(0)`. |
+
+### What grading Midterm 3 uses
+
+- **Thread questions (`meta.json` `warmUp`).** A class in the question's
+  `helpers/` whose static `warmUp()` the sandbox calls in the run's own
+  class loader, with its output discarded, before Run and before every
+  test. Building the questions showed the failure more precisely than the
+  proof: in a fresh CheerpJ JVM, when several threads first make calls the
+  student's code has not yet made **with the classes they now see**, one
+  thread can die silently (no exception at all; a correct counter ends at
+  70 of 80, every time). A warm-up through the same classes the concurrent
+  tests use prevents it (3 of 3 fresh JVMs); one that also goes through
+  another class (the given `MemoryTally` as well as the tests' `SlowTally`)
+  does not (0 of 2). So a warm-up uses exactly the tests' classes.
+  `e2e/m3-grading.spec.ts` checks this in a fresh JVM.
+- **CheerpJ's own failures are rerun once.** The sandbox notes an
+  exception with no stack frame from the run's own classes (student, given,
+  harness): one CheerpJ threw, not the student's code. Run results and
+  harness cases report it as `runtimeFault`, a harness case with one
+  fails, and the grader runs such a test once more before it counts.
+- **Swing questions (`swingPanel`).** The sandbox's Swing class loader
+  (`RunLoader`) renames `JPanel`, `JButton`, `JLabel`, `JTextField`,
+  `JComponent`, `AbstractButton` and `JTextComponent` to the fakes in
+  `java/sandbox/sivaku/swing`, which cover what course panels use (texts,
+  listeners, enabling, visibility, borders, fonts, colours, sizes,
+  alignment, mnemonics, client properties, layouts, adding and removing).
+  **Run draws the panel** under the editor as plain HTML: buttons click,
+  fields type (Enter fires a field's listeners), labels follow, a Close
+  button ends it.
+- **The JUnit question (`"kind": "junit"`).** The sandbox's small runner
+  (`TestRunner`) runs the student's test class against each hidden
+  implementation in `implementations/`, each in its own class loader.
+  Its `org.junit.jupiter.api.Assertions` is generated from real JUnit's
+  (`scripts/gen-junit-assertions.mjs`): all 291 methods with identical
+  signatures, so anything that compiles on Ed compiles here, plus
+  `@Test`, `@BeforeEach`, `@AfterEach`, `@BeforeAll`, `@AfterAll`,
+  `@DisplayName`, `@Disabled` and `@Tag`. Real JUnit stays as the
+  cross-check: `npm run verify` runs every JUnit question's solution,
+  starter and broken suites with real JUnit too and requires the same
+  result for every case, and `e2e/junit-runner.spec.ts` requires the
+  same pass, fail or skip for every test of a tour of the assertions, on
+  the JDK and in the browser.
+- **Per-question reference sheets** (`meta.json` `reference`), two
+  columns, from the exam's `sheets/` folder.
+
+### Java start-up: how often it stalls
+
+`scripts/measure-startup.mjs` starts the site's Java worker 30 times in
+fresh browser profiles (a cold cache) and again with a warm cache, from a
+public page, timing each step the worker reports. 16 Nov 2026, a Windows
+laptop and, through the nightly workflow, CI:
+
+| | Starts | Stalled | Cold: median / 90% / slowest | Warm: median / slowest |
+|---|---|---|---|---|
+| Dev server | 60 | 0 | 6.7 / 14.6 / 28.4 s | 2.0 / 12.3 s |
+| Production build | 60 | 0 | 8.7 / 13.3 / 18.4 s | 1.9 / 8.7 s |
+| CI (GitHub's Ubuntu runner, production build) | 60 | 0 | 14.2 / 15.1 / 15.7 s | 2.9 / 9.5 s |
+
+Almost all of a cold start is loading the sandbox jar into CheerpJ
+(`cheerpjRunLibrary`: median 4.8 to 6.5 s, up to 23 s). The stalls seen
+before happened only during long browser-test runs, where an attempt never
+finished.
+
+**Retrying sooner.** A start used to wait 60 s, then kill the attempt and
+start again. Now a second attempt starts *alongside* the first after 20 s,
+and a third after 40 s; the first ready is kept and the others stopped, and
+the last gets 60 s more before Java gives up. A start that is only slow
+(the slowest measured took 28 s) is never cut off. With CheerpJ's loader
+held back on the first attempt (as `e2e/workspace.spec.ts` does):
+
+| | Before | After |
+|---|---|---|
+| No stall | 6.2–6.7 s | 5.6–7.2 s |
+| First attempt stalls | 66.3–66.9 s | 26.6–27.5 s |
+| First attempt 25 s slow | about 31 s | 27.6 s |
+
+A timed-out attempt's console warning now names the last step each
+attempt reached.
 
 ## The exam workspace
 
@@ -400,10 +480,15 @@ A question is a folder; a new exam or course is a new folder, not new code.
 content/<course>/<exam>/
   exam.json          {"title", "minutes": 60, "instructions": "markdown", "draft"?: true}
   reference.md       the reference sheet shown under every question in the exam
+  sheets/<name>.md   reference sheets of their own, for questions that name one
   <nn-slug>/         one question, e.g. 03-playlist; folders sort into exam order
     question.md      the description and the sample (no hints, no topic label)
     meta.json        {"title", "points", "editable": [...], "readOnly": [...],
-                      "mainClass"?: "Main", "harnessClass"?: "Harness"}
+                      "mainClass"?: "Main", "harnessClass"?: "Harness",
+                      "reference"?: sheet name, "warmUp"?: helper class
+                      (thread questions), "swingPanel"?: panel class (Swing)}
+    implementations/ "kind": "junit" only: the hidden classes the student's
+                     tests run against, one folder each (correct, and one per bug)
     starter/         what the student starts with: Main.java holding an empty
                      void main() { } for a whole-program question (the
                      samples start from an empty file); otherwise the editable files with
@@ -433,7 +518,7 @@ has a free-form `name` and its own `points` (a whole number, 0 or more).
 `"sample": true` marks the tests from the handout: a failed sample says why,
 and every other case is hidden and shows only pass or fail. Sample tests may
 be worth points. Case points add up to the question's `points`, which is 4
-to 16 (the midterms' range); an exam's questions add up to 100 unless
+to 18 (the midterms' range); an exam's questions add up to 100 unless
 `exam.json` says `"draft": true`.
 
 The three kinds of test:
@@ -443,6 +528,7 @@ The three kinds of test:
 | `stdio` | `stdin`, and `stdout`, `outputLine` or `labelledLines` | running `Main` with that input prints exactly that output, that line, or those lines |
 | `files` | `inputFiles` (left out for none), `outputFiles` (`null` means "must not exist"), optionally an output check as for `stdio` | the files after the run, and the output if given, are exactly as expected |
 | `harness` | `call`: a public static method of the harness class | the method returns rather than throwing |
+| `junit` | `implementation` (a folder in implementations/) and `expect`: `"pass"` or `"catch"`; tests.json names the `testClass` | the student's tests all pass on it ("pass", the correct class) or one fails ("catch", a buggy one); any failure on the correct class makes every case fail |
 
 For Ed's Midterm 1 pattern, one test per output line, give each case an
 `outputLine` instead of `stdout`:

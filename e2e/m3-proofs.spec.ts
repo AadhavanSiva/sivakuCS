@@ -241,7 +241,12 @@ for (const where of ["local", "browser"] as const) {
     // methods run once on one thread first) is what a grader will do.
     test("1. threads (cold): recorded, not required", async ({ page }) => {
       test.setTimeout(10 * 60_000);
-      record(where, "threads-cold", await threads(await java(page), "cold"));
+      // Recorded whatever happens: on GitHub's runners the cold race has crashed the tab.
+      try {
+        record(where, "threads-cold", await threads(await java(page), "cold"));
+      } catch (error) {
+        record(where, "threads-cold", { failed: error instanceof Error ? error.message : String(error) });
+      }
     });
 
     test("1. threads (warm): a slow store exposes a missing synchronized every time, and overlap is detected", async ({ page }) => {

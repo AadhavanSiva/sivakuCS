@@ -3,6 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { getJava } from "@/lib/java-runtime";
 import { type JavaFiles, runInteractively } from "@/lib/java/programs";
+import { type SwingNode, SwingPanelView } from "./SwingPanelView";
 
 /** Program time per Run; time spent waiting for typed input does not count. */
 export const RUN_TIME_LIMIT_MS = 10_000;
@@ -20,6 +21,10 @@ type Props = {
   /** Data files (laps.txt...) placed in the working directory first. */
   inputFiles: JavaFiles;
   mainClass: string;
+  /** Sandbox run options for this question (a thread question's warm-up). */
+  options?: string;
+  /** A Swing question's panel class: Run draws the panel instead of running main. */
+  swingPanel?: string;
   onRunningChange: (running: boolean) => void;
 };
 
@@ -29,13 +34,15 @@ type Props = {
  * caret sits after its last output; Enter sends the line, Ctrl+D ends input.
  */
 export const RunConsole = forwardRef<RunConsoleHandle, Props>(function RunConsole(
-  { files, inputFiles, mainClass, onRunningChange },
+  { files, inputFiles, mainClass, options = "", swingPanel, onRunningChange },
   ref,
 ) {
   const [chunks, setChunks] = useState<Chunk[]>([]);
   const [running, setRunning] = useState(false);
   const [inputEnded, setInputEnded] = useState(false);
   const [line, setLine] = useState("");
+  // A Swing question's panel, as the sandbox last described it (see sivaku.swing.SwingHost).
+  const [panel, setPanel] = useState<SwingNode | null>(null);
   const terminal = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   // For the unmount clean-up, which must not see a stale `running`.
@@ -58,6 +65,7 @@ export const RunConsole = forwardRef<RunConsoleHandle, Props>(function RunConsol
   async function run() {
     if (runningRef.current) return;
     setChunks([]);
+    setPanel(null);
     setInputEnded(false);
     setLine("");
     runningRef.current = true;
@@ -65,9 +73,15 @@ export const RunConsole = forwardRef<RunConsoleHandle, Props>(function RunConsol
     onRunningChange(true);
     const outcome = await runInteractively(
       getJava(),
-      { files, inputFiles, mainClass, timeLimitMs: RUN_TIME_LIMIT_MS },
       {
-        onOutput: (stream, text) => add({ kind: stream, text }),
+        files,
+        inputFiles,
+        mainClass,
+        timeLimitMs: RUN_TIME_LIMIT_MS,
+        options: [options, swingPanel ? `swingPanel=${swingPanel}` : ""].filter(Boolean).join(";"),
+      },
+      {
+        onOutput: (stream, text) => (stream === "ui" ? setPanel(JSON.parse(text) as SwingNode) : add({ kind: stream, text })),
         onWaitingForInput: (waiting) => {
           if (waiting) input.current?.focus({ preventScroll: true });
         },
@@ -78,7 +92,11 @@ export const RunConsole = forwardRef<RunConsoleHandle, Props>(function RunConsol
         add({ kind: "problem", text: outcome.output });
         break;
       case "finished":
-        add({ kind: "note", text: outcome.exitCode === 0 ? "\n[Program finished]" : `\n[Program finished with exit code ${outcome.exitCode}]` });
+        if (swingPanel && outcome.exitCode === 0) {
+          add({ kind: "note", text: "\n[Panel closed]" });
+        } else {
+          add({ kind: "note", text: outcome.exitCode === 0 ? "\n[Program finished]" : `\n[Program finished with exit code ${outcome.exitCode}]` });
+        }
         break;
       case "timeout":
         add({ kind: "problem", text: `\n[Stopped: the program ran for more than ${outcome.timeLimitMs / 1000} seconds]` });
@@ -92,6 +110,7 @@ export const RunConsole = forwardRef<RunConsoleHandle, Props>(function RunConsol
     }
     runningRef.current = false;
     setRunning(false);
+    setPanel(null);
     setLine("");
     onRunningChange(false);
   }
@@ -133,15 +152,29 @@ export const RunConsole = forwardRef<RunConsoleHandle, Props>(function RunConsol
       className="h-full min-h-0 cursor-text overflow-y-auto whitespace-pre-wrap break-words bg-[#141414] px-3 py-2 font-mono text-[13px] leading-5 text-neutral-200"
     >
       {chunks.length === 0 && !running && (
-        <span className="text-neutral-500">Press Run to compile and run {mainClass}.java.</span>
+        <span className="text-neutral-500">
+          {swingPanel
+            ? `Press Run to try your ${swingPanel}: it appears here, as it would in a window.`
+            : `Press Run to compile and run ${mainClass}.java.`}
+        </span>
       )}
-      {chunks.length === 0 && running && <span className="text-neutral-500">Compiling…</span>}
+      {chunks.length === 0 && running && !panel && <span className="text-neutral-500">Compiling…</span>}
+      {panel && (
+        <SwingPanelView
+          root={panel}
+          send={(event) => getJava().sendInput(event)}
+          close={() => {
+            getJava().sendInput(null);
+            setInputEnded(true);
+          }}
+        />
+      )}
       {chunks.map((chunk, i) => (
         <span key={i} data-kind={chunk.kind} className={CHUNK_STYLE[chunk.kind]}>
           {chunk.text}
         </span>
       ))}
-      {running && !inputEnded && (
+      {running && !inputEnded && !swingPanel && (
         <input
           ref={input}
           data-testid="console-input"

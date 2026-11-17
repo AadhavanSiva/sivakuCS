@@ -1,0 +1,15 @@
+{
+  "kind": "harness",
+  "timeLimitMs": 5000,
+  "cases": [
+    { "name": "Sample from the handout", "points": 0, "sample": true, "call": "sampleFromTheHandout" },
+    { "name": "Case 1", "points": 1, "call": "startsAtZero" },
+    { "name": "Case 2", "points": 1, "call": "oneLap" },
+    { "name": "Case 3", "points": 1, "call": "threeLaps" },
+    { "name": "Case 4", "points": 1, "call": "resetShowsZero" },
+    { "name": "Case 5", "points": 1, "call": "countsAgainAfterReset" },
+    { "name": "Case 6", "points": 1, "call": "countMatchesTheLabel" },
+    { "name": "Case 7", "points": 1, "call": "panelsCountSeparately" },
+    { "name": "Case 8", "points": 1, "call": "resetAtZeroThenMany" }
+  ]
+}

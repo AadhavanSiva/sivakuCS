@@ -32,7 +32,9 @@ export default defineConfig({
     {
       name: "chromium",
       dependencies: ["setup"],
-      testIgnore: /auth\.setup\.ts/,
+      // The Midterm 3 proofs are slow and about CheerpJ, not the site: they run
+      // nightly (.github/workflows/nightly.yml sets SIVAKU_NIGHTLY).
+      testIgnore: process.env.SIVAKU_NIGHTLY ? [/auth\.setup\.ts/] : [/auth\.setup\.ts/, /m3-proofs\.spec\.ts/],
       use: { ...devices["Desktop Chrome"], storageState: STUDENT_STATE },
     },
   ],

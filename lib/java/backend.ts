@@ -15,8 +15,12 @@ export type SandboxMethod =
   | "compile"
   | "compileWith"
   | "run"
+  | "runWith"
   | "runInteractive"
-  | "callHarness";
+  | "runInteractiveWith"
+  | "callHarness"
+  | "callHarnessWith"
+  | "runTests";
 
 export type SandboxPaths = {
   /** The program's working directory; relative file names land here. */
@@ -43,7 +47,7 @@ export type CallOptions = {
    * whether it is waiting for a typed line. The time limit is paused while
    * it waits.
    */
-  onOutput?: (stream: "out" | "err", text: string) => void;
+  onOutput?: (stream: "out" | "err" | "ui", text: string) => void;
   onWaitingForInput?: (waiting: boolean) => void;
 };
 
@@ -73,6 +77,8 @@ export class JavaStoppedError extends Error {
 export function sandboxDirs(paths: SandboxPaths) {
   const own = `${paths.work}/${paths.own}`;
   return {
+    /** The sandbox's own folder; other folders it needs (JUnit implementations) go in it. */
+    root: own,
     src: `${own}/src`,
     classes: `${own}/classes`,
     harnessSrc: `${own}/harness-src`,

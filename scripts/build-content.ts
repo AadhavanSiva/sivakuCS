@@ -23,7 +23,12 @@ const exams: Exam[] = examDirs().map((dir) => {
     referenceHtml: html(exam.reference),
     referenceApi: parseReferenceSheet(exam.reference),
     instructionsHtml: html(exam.meta.instructions),
-    questions: exam.questions.map((q) => ({ ...q, descriptionHtml: html(q.description) })),
+    questions: exam.questions.map((q) => ({
+      ...q,
+      descriptionHtml: html(q.description),
+      // A question with its own sheet (Midterm 3) shows that instead of the exam's.
+      ...(q.reference ? { referenceHtml: html(q.reference), referenceApi: parseReferenceSheet(q.reference) } : {}),
+    })),
   };
 });
 const out = join(process.cwd(), "generated");

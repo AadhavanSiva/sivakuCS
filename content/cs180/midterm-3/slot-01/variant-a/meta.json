@@ -1,0 +1,9 @@
+{
+  "title": "Lap counter",
+  "points": 8,
+  "editable": ["LapCounterPanel.java"],
+  "readOnly": ["LapCounterMain.java"],
+  "mainClass": "LapCounterMain",
+  "swingPanel": "LapCounterPanel",
+  "reference": "swing"
+}

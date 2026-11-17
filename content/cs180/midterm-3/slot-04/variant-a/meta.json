@@ -1,0 +1,7 @@
+{
+  "title": "Quiz scores tests",
+  "points": 14,
+  "editable": ["QuizScoresTest.java"],
+  "readOnly": ["QuizScores.java"],
+  "reference": "junit"
+}

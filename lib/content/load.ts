@@ -8,7 +8,7 @@
 //   content/<course>/<exam>/<nn-slug>/       one question; see lib/grading/types.ts
 //   content/<course>/<exam>/slot-NN/variant-a/  or one question of a bank (questionDirs)
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import type { JavaFiles } from "../java/programs";
 import type { Question, QuestionMeta, TestsFile } from "../grading/types";
 import type { Exam, ExamMeta } from "./types";
@@ -83,21 +83,42 @@ export function examDirs(root = CONTENT_ROOT): string[] {
 
 const idOf = (dir: string, root: string) => relative(root, dir).split(sep).join("/");
 
+/** Each subfolder of dir/name as files: alternates/<set>/, implementations/<name>/. */
+const folders = (dir: string, name: string): Record<string, JavaFiles> =>
+  Object.fromEntries(
+    (existsSync(join(dir, name)) ? subdirs(join(dir, name), /^[a-z0-9-]+$/) : []).map((sub) => [
+      sub,
+      readFiles(join(dir, name, sub)),
+    ]),
+  );
+
+/** The exam folder a question folder is in: the nearest one up with an exam.json. */
+function examDirOf(dir: string): string | null {
+  for (let d = dirname(dir); d !== dirname(d); d = dirname(d)) {
+    if (existsSync(join(d, "exam.json"))) return d;
+  }
+  return null;
+}
+
+/** sheets/<name>.md in the question's exam folder, for a question with its own reference sheet. */
+export function sheetPath(questionDir: string, name: string): string {
+  return join(examDirOf(questionDir) ?? dirname(questionDir), "sheets", `${name}.md`);
+}
+
 export function loadQuestion(dir: string, root = CONTENT_ROOT): Question {
+  const meta = readJson<QuestionMeta>(join(dir, "meta.json"));
+  const sheet = meta.reference ? sheetPath(dir, meta.reference) : null;
   return {
     id: idOf(dir, root),
-    meta: readJson<QuestionMeta>(join(dir, "meta.json")),
+    meta,
     description: readFileSync(join(dir, "question.md"), "utf8"),
     starter: readFiles(join(dir, "starter")),
     given: readFiles(join(dir, "given")),
     harness: readFiles(join(dir, "harness")),
     helpers: readFiles(join(dir, "helpers")),
-    alternates: Object.fromEntries(
-      (existsSync(join(dir, "alternates")) ? subdirs(join(dir, "alternates"), /^[a-z0-9-]+$/) : []).map((name) => [
-        name,
-        readFiles(join(dir, "alternates", name)),
-      ]),
-    ),
+    alternates: folders(dir, "alternates"),
+    implementations: folders(dir, "implementations"),
+    ...(sheet && existsSync(sheet) ? { reference: readFileSync(sheet, "utf8") } : {}),
     tests: readJson<TestsFile>(join(dir, "tests.json")),
   };
 }

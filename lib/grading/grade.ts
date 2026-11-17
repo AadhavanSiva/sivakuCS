@@ -50,10 +50,13 @@ export async function gradeQuestion(
     cases.map((testCase, i) => caseResult(testCase, i, false, { reason }));
 
   // Code that does not compile scores 0 and shows the compiler's messages.
-  const compile = await compileFiles(java, filesToCompile(question, studentFiles));
+  // A JUnit question's tests compile against the sandbox's JUnit 5 API.
+  const junit = question.tests.kind === "junit";
+  const compile = await compileFiles(java, filesToCompile(question, studentFiles), junit ? [java.paths.sandboxJar] : []);
   if (!compile.ok) {
     return result(failAll("Your code does not compile."), { compiled: false, compileOutput: compile.output, score: 0 });
   }
+  if (junit) return result(await gradeJunit(java, question));
 
   // Cases run in groups: first those against the given files, then, for
   // each alternate set a case names, the student's code compiled again
@@ -110,6 +113,83 @@ async function prepareHarness(java: JavaBackend, question: Question): Promise<st
   return `${dirs.classes}${sep}${dirs.harnessClasses}`;
 }
 
+/**
+ * The sandbox's run options for a question (sivaku.sandbox.RunOptions):
+ * Swing renamed to the fakes, and a thread question's warm-up.
+ */
+export function runOptions(question: Question): string {
+  const { swingPanel, warmUp } = question.meta;
+  return [swingPanel ? "swing" : "", warmUp ? `warmUp=${warmUp}` : ""].filter(Boolean).join(";");
+}
+
+type TestRun = {
+  tests: { name: string; passed: boolean; skipped: boolean; reason: string | null }[] | null;
+  error: string | null;
+  runtimeFault: string | null;
+};
+
+/**
+ * A JUnit question: the student's test class runs with the small runner
+ * against each hidden implementation, each compiled into its own folder and
+ * put first on the class path, so each gets its own class loader. A "pass"
+ * case passes when every test passes; a "catch" case when at least one
+ * fails. Any failing test on the correct implementation scores 0 for all.
+ */
+async function gradeJunit(java: JavaBackend, question: Question): Promise<CaseResult[]> {
+  const { cases, testClass, timeLimitMs = DEFAULT_TIME_LIMIT_MS } = question.tests;
+  const dirs = sandboxDirs(java.paths);
+  const sep = java.paths.pathSeparator;
+  const runs = new Map<string, TestRun | { failed: string }>();
+  for (const name of new Set(cases.map((c) => c.implementation!))) {
+    const src = `${dirs.root}/impl-${name}-src`;
+    const out = `${dirs.root}/impl-${name}`;
+    await writeFiles(java, src, question.implementations?.[name] ?? {});
+    await java.call("reset", [out]);
+    const compiled = JSON.parse((await java.call("compileWith", [src, out, dirs.classes], { activity: "compiling" }))!);
+    if (!compiled.ok) {
+      runs.set(name, { failed: `The hidden ${name} implementation did not compile:\n${compiled.output}` });
+      continue;
+    }
+    const once = async () => {
+      await prepareWorkDir(java, {});
+      return JSON.parse(
+        (await java.call("runTests", [`${out}${sep}${dirs.classes}`, testClass!, runOptions(question)], {
+          activity: "running",
+          timeoutMs: timeLimitMs,
+        }))!,
+      ) as TestRun;
+    };
+    try {
+      let run = await once();
+      if (run.runtimeFault) run = await once();
+      runs.set(name, run);
+    } catch (error) {
+      if (error instanceof JavaStoppedError) throw error;
+      runs.set(name, { failed: failureReason(error, timeLimitMs) });
+    }
+  }
+
+  const results = cases.map((testCase, i) => {
+    const run = runs.get(testCase.implementation!)!;
+    if ("failed" in run) return caseResult(testCase, i, false, { reason: run.failed });
+    if (run.tests === null) return caseResult(testCase, i, false, { reason: `Your tests could not run: ${run.error}` });
+    const ran = run.tests.filter((t) => !t.skipped);
+    const failed = ran.filter((t) => !t.passed);
+    if (testCase.expect === "pass") {
+      if (ran.length === 0) return caseResult(testCase, i, false, { reason: "There are no tests to run." });
+      const why = failed.map((t) => `${t.name} failed: ${t.reason}`).join("\n");
+      return caseResult(testCase, i, failed.length === 0, { reason: why });
+    }
+    return caseResult(testCase, i, failed.length > 0, { reason: "None of your tests failed on this implementation." });
+  });
+  // A suite that fails on a correct implementation proves nothing about the buggy ones.
+  const wrongOnCorrect = results.some((r, i) => cases[i].expect === "pass" && !r.passed);
+  if (!wrongOnCorrect) return results;
+  return results.map((r, i) =>
+    cases[i].expect === "pass" ? r : caseResult(cases[i], i, false, { reason: "Your tests fail on a correct implementation." }),
+  );
+}
+
 function failureReason(error: unknown, timeLimitMs: number): string {
   return error instanceof JavaTimeoutError
     ? `Timed out: your code ran for more than ${timeLimitMs / 1000} seconds.`
@@ -140,10 +220,16 @@ async function runFor(
   let cached = runs.get(key);
   if (!cached) {
     try {
-      await prepareWorkDir(java, inputFiles);
-      const run = await runCompiled(java, classPath, question.meta.mainClass ?? "Main", testCase.stdin ?? "", timeLimitMs);
-      const files = kind === "files" ? await readWorkDir(java) : {};
-      cached = { run, files };
+      const once = async () => {
+        await prepareWorkDir(java, inputFiles);
+        const options = runOptions(question);
+        const run = await runCompiled(java, classPath, question.meta.mainClass ?? "Main", testCase.stdin ?? "", timeLimitMs, options);
+        return { run, files: kind === "files" ? await readWorkDir(java) : {} };
+      };
+      // A run that failed inside CheerpJ rather than in the student's code runs once more.
+      let attempt = await once();
+      if (attempt.run.runtimeFault) attempt = await once();
+      cached = attempt;
     } catch (error) {
       if (error instanceof JavaStoppedError) throw error;
       // A run that timed out fails every case that shares it, without
@@ -176,14 +262,19 @@ async function runCase(
 
   if (kind === "harness") {
     if (!testCase.call) throw new Error(`Case "${testCase.name}" has no "call"`);
-    await prepareWorkDir(java, {});
     const harnessClass = question.meta.harnessClass ?? "Harness";
-    const outcome = JSON.parse(
-      (await java.call("callHarness", [classPath, harnessClass, testCase.call], {
-        activity: "running",
-        timeoutMs: timeLimitMs,
-      }))!,
-    ) as { passed: boolean; reason: string | null };
+    const once = async () => {
+      await prepareWorkDir(java, {});
+      return JSON.parse(
+        (await java.call("callHarnessWith", [classPath, harnessClass, testCase.call!, runOptions(question)], {
+          activity: "running",
+          timeoutMs: timeLimitMs,
+        }))!,
+      ) as { passed: boolean; reason: string | null; runtimeFault: string | null };
+    };
+    // A case that failed inside CheerpJ rather than in the student's code runs once more.
+    let outcome = await once();
+    if (!outcome.passed && outcome.runtimeFault) outcome = await once();
     return caseResult(testCase, index, outcome.passed, { reason: outcome.reason ?? undefined });
   }
 

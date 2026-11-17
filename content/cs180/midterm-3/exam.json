@@ -1,0 +1,6 @@
+{
+  "title": "Midterm 3",
+  "minutes": 60,
+  "draft": true,
+  "instructions": "7 free-response coding questions, worth 8 to 18 points each.\n\nEach question has its own reference sheet, below its description. Where a question gives a read-only `Main.java`, you can Run it to try your code; for the Swing question, Run shows your panel."
+}

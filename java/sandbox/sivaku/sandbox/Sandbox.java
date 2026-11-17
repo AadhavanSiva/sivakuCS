@@ -313,17 +313,29 @@ public final class Sandbox {
      *     "stderrTruncated", "ms"}.
      */
     public static String run(String classPath, String mainClass, String stdin) throws IOException {
+        return runWith(classPath, mainClass, stdin, "");
+    }
+
+    /**
+     * As {@link #run(String, String, String)}, with run options (a separate
+     * name, not an overload: CheerpJ resolves overloads unreliably): see
+     * {@link RunOptions}. The result also has "runtimeFault": why the run
+     * looks like it failed inside CheerpJ rather than in the student's code,
+     * or null.
+     */
+    public static String runWith(String classPath, String mainClass, String stdin, String options) throws IOException {
         Capture out = new Capture();
         Capture err = new Capture();
         long start = System.nanoTime();
         int exitCode = launchMain(classPath, mainClass,
-                new ByteArrayInputStream(stdin.getBytes(StandardCharsets.UTF_8)), out, err);
+                new ByteArrayInputStream(stdin.getBytes(StandardCharsets.UTF_8)), out, err, RunOptions.parse(options));
         long ms = (System.nanoTime() - start) / 1_000_000;
         return "{\"exitCode\":" + exitCode
                 + ",\"stdout\":" + json(out.text())
                 + ",\"stderr\":" + json(err.text())
                 + ",\"stdoutTruncated\":" + out.truncated
                 + ",\"stderrTruncated\":" + err.truncated
+                + ",\"runtimeFault\":" + json(runtimeFault)
                 + ",\"ms\":" + ms + "}";
     }
 
@@ -337,28 +349,51 @@ public final class Sandbox {
      *     has already been sent.
      */
     public static String runInteractive(String classPath, String mainClass) throws IOException {
+        return runInteractiveWith(classPath, mainClass, "");
+    }
+
+    /**
+     * As {@link #runInteractive(String, String)}, with run options. With
+     * "swingPanel=ClassName" it runs no main: it builds that panel with the
+     * Swing fakes and lets the page draw and drive it (see sivaku.swing.SwingHost),
+     * sending the panel as JSON on the "ui" stream after every event, until
+     * the page ends the input.
+     */
+    public static String runInteractiveWith(String classPath, String mainClass, String options) throws IOException {
         HostOutput out = new HostOutput("out");
         HostOutput err = new HostOutput("err");
         long start = System.nanoTime();
-        int exitCode = launchMain(classPath, mainClass, new HostInput(), out, err);
+        int exitCode = launchMain(classPath, mainClass, new HostInput(), out, err, RunOptions.parse(options));
         long ms = (System.nanoTime() - start) / 1_000_000;
         return "{\"exitCode\":" + exitCode
                 + ",\"outputTruncated\":" + (out.truncated || err.truncated)
+                + ",\"runtimeFault\":" + json(runtimeFault)
                 + ",\"ms\":" + ms + "}";
     }
 
-    /** Sends output to the page ("out" or "err"). Implemented in the worker. */
+    /** Sends output to the page ("out", "err", or "ui" for a Swing panel). Implemented in the worker. */
     private static native void hostWrite(String stream, String text);
 
     /** Waits for the student to type a line; null when they end the input. Implemented in the worker. */
     private static native String hostReadLine();
 
     /** Runs main with these streams and returns the exit code, reporting failures as the java launcher does. */
-    private static int launchMain(String classPath, String mainClass, InputStream in, OutputStream out, OutputStream err)
-            throws IOException {
+    private static int launchMain(String classPath, String mainClass, InputStream in, OutputStream out, OutputStream err,
+            RunOptions options) throws IOException {
         int exitCode = 0;
-        try (URLClassLoader loader = open(classPath, in, out, err)) {
-            launch(loader.loadClass(mainClass));
+        try (RunLoader loader = open(classPath, in, out, err, options)) {
+            warmUp(loader, options);
+            try {
+                if (options.swingPanel() != null) {
+                    serveSwingPanel(loader, options.swingPanel());
+                } else {
+                    launch(loader.loadClass(mainClass));
+                }
+            } catch (InvocationTargetException e) {
+                // While the loader is open: it is what tells the run's own frames apart.
+                noteRuntimeFault(e.getCause(), "main");
+                throw e;
+            }
         } catch (InvocationTargetException e) {
             if (e.getCause() instanceof ExitSignal exit) {
                 exitCode = exit.status;
@@ -393,16 +428,30 @@ public final class Sandbox {
      *     null when the case passed.
      */
     public static String callHarness(String classPath, String harnessClass, String method) throws IOException {
+        return callHarnessWith(classPath, harnessClass, method, "");
+    }
+
+    /** As {@link #callHarness(String, String, String)}, with run options; the result also has "runtimeFault". */
+    public static String callHarnessWith(String classPath, String harnessClass, String method, String options)
+            throws IOException {
         Capture out = new Capture();
         Capture err = new Capture();
         String reason = null;
         long start = System.nanoTime();
-        try (URLClassLoader loader = open(classPath, InputStream.nullInputStream(), out, err)) {
+        RunOptions parsed = RunOptions.parse(options);
+        try (RunLoader loader = open(classPath, InputStream.nullInputStream(), out, err, parsed)) {
+            warmUp(loader, parsed);
             Method test = loader.loadClass(harnessClass).getMethod(method);
             if (!Modifier.isStatic(test.getModifiers())) {
                 throw new NoSuchMethodException(harnessClass + "." + method + " is not static");
             }
-            test.invoke(null);
+            try {
+                test.invoke(null);
+            } catch (InvocationTargetException e) {
+                // While the loader is open: it is what tells the run's own frames apart.
+                noteRuntimeFault(e.getCause(), "the test");
+                throw e;
+            }
         } catch (InvocationTargetException e) {
             reason = describeFailure(e.getCause());
         } catch (ReflectiveOperationException | LinkageError e) {
@@ -413,8 +462,47 @@ public final class Sandbox {
             close();
         }
         long ms = (System.nanoTime() - start) / 1_000_000;
-        return "{\"passed\":" + (reason == null)
+        // A thread that died inside CheerpJ fails the case even if the test's own checks passed.
+        boolean passed = reason == null && runtimeFault == null;
+        if (!passed && reason == null) {
+            reason = "A thread stopped unexpectedly: " + runtimeFault;
+        }
+        return "{\"passed\":" + passed
                 + ",\"reason\":" + json(reason)
+                + ",\"stdout\":" + json(out.text())
+                + ",\"stderr\":" + json(err.text())
+                + ",\"runtimeFault\":" + json(runtimeFault)
+                + ",\"ms\":" + ms + "}";
+    }
+
+    /**
+     * Runs a student's JUnit 5 test class with the small runner (TestRunner),
+     * for the JUnit question: the class path puts one hidden implementation
+     * first, so each implementation gets its own class loader and run.
+     *
+     * @return JSON {"tests": [{"name", "passed", "skipped", "reason"}], "error",
+     *     "runtimeFault", "stdout", "stderr", "ms"}; error is set (and tests
+     *     null) when the test class could not be loaded or run at all.
+     */
+    public static String runTests(String classPath, String testClass, String options) throws IOException {
+        Capture out = new Capture();
+        Capture err = new Capture();
+        String tests = null;
+        String error = null;
+        long start = System.nanoTime();
+        RunOptions parsed = RunOptions.parse(options);
+        try (RunLoader loader = open(classPath, InputStream.nullInputStream(), out, err, parsed)) {
+            warmUp(loader, parsed);
+            tests = TestRunner.run(loader.loadClass(testClass), Sandbox::describeFailure);
+        } catch (ReflectiveOperationException | LinkageError e) {
+            error = describeFailure(e);
+        } finally {
+            close();
+        }
+        long ms = (System.nanoTime() - start) / 1_000_000;
+        return "{\"tests\":" + (tests == null ? "null" : tests)
+                + ",\"error\":" + json(error)
+                + ",\"runtimeFault\":" + json(runtimeFault)
                 + ",\"stdout\":" + json(out.text())
                 + ",\"stderr\":" + json(err.text())
                 + ",\"ms\":" + ms + "}";
@@ -435,9 +523,18 @@ public final class Sandbox {
         return "Unexpected exception thrown: " + t.getClass().getName() + (message == null ? "" : ": " + message);
     }
 
+    /**
+     * Why the current run looks like it failed inside CheerpJ rather than in
+     * the student's code (see {@link #noteRuntimeFault}), or null.
+     */
+    private static volatile String runtimeFault;
+
+    /** The current run's class loader, to tell its own stack frames from the runtime's. */
+    private static volatile RunLoader current;
+
     /** Points the shared streams at this run's input and capture, and opens its class loader. */
-    private static URLClassLoader open(String classPath, InputStream in, OutputStream out, OutputStream err)
-            throws IOException {
+    private static RunLoader open(String classPath, InputStream in, OutputStream out, OutputStream err,
+            RunOptions options) throws IOException {
         STDIN.use(in);
         STDOUT.use(out);
         STDERR.use(err);
@@ -447,15 +544,105 @@ public final class Sandbox {
                 urls.add(Path.of(entry).toUri().toURL());
             }
         }
-        URLClassLoader loader = new URLClassLoader(urls.toArray(URL[]::new), Sandbox.class.getClassLoader());
+        RunLoader loader = new RunLoader(urls.toArray(URL[]::new), Sandbox.class.getClassLoader(), options.swing());
         Thread.currentThread().setContextClassLoader(loader);
+        current = loader;
+        runtimeFault = null;
+        // Threads the run starts report as the java launcher would, and are
+        // checked for failures inside the runtime itself.
+        Thread.setDefaultUncaughtExceptionHandler((thread, t) -> {
+            noteRuntimeFault(t, "thread \"" + thread.getName() + "\"");
+            System.err.print("Exception in thread \"" + thread.getName() + "\" ");
+            t.printStackTrace(System.err);
+        });
         return loader;
+    }
+
+    /**
+     * Notes an exception with no stack frame in the run's own classes: it was
+     * thrown inside CheerpJ (or the JDK) without the student's code being on
+     * the stack at all, as when CheerpJ kills a thread the first time several
+     * threads start the same code together (java/proofs/m3/threads). Graders
+     * rerun such a test once before failing it.
+     */
+    static void noteRuntimeFault(Throwable t, String where) {
+        RunLoader loader = current;
+        if (loader == null || t instanceof ExitSignal) {
+            return;
+        }
+        for (Throwable x = t; x != null; x = x.getCause()) {
+            for (StackTraceElement frame : x.getStackTrace()) {
+                if (loader.isOwn(frame.getClassName())) {
+                    return;
+                }
+            }
+        }
+        if (runtimeFault == null) {
+            runtimeFault = where + ": " + t;
+        }
+    }
+
+    /**
+     * Calls the question's warm-up, if any, in the run's own class loader with
+     * its output discarded; whatever it throws is ignored. CheerpJ compiles
+     * classes per class loader, so the warm-up must share the run's.
+     */
+    private static void warmUp(RunLoader loader, RunOptions options) {
+        if (options.warmUp() == null) {
+            return;
+        }
+        OutputStream out = STDOUT.target;
+        OutputStream err = STDERR.target;
+        InputStream in = STDIN.target;
+        STDOUT.use(OutputStream.nullOutputStream());
+        STDERR.use(OutputStream.nullOutputStream());
+        STDIN.use(InputStream.nullInputStream());
+        try {
+            loader.loadClass(options.warmUp()).getMethod("warmUp").invoke(null);
+        } catch (Throwable ignored) {
+            // A warm-up only exercises code; the run itself reports any problem.
+        } finally {
+            STDOUT.use(out);
+            STDERR.use(err);
+            STDIN.use(in);
+            runtimeFault = null;
+        }
+    }
+
+    /** Run for a Swing question: builds the panel and lets the page draw it and send clicks and typing. */
+    private static void serveSwingPanel(RunLoader loader, String panelClass) throws ReflectiveOperationException {
+        Constructor<?> make = loader.loadClass(panelClass).getDeclaredConstructor();
+        make.setAccessible(true);
+        Object panel = make.newInstance();
+        if (!(panel instanceof sivaku.swing.FakeComponent root)) {
+            System.err.println(panelClass + " is not a JPanel");
+            return;
+        }
+        sivaku.swing.SwingHost host = new sivaku.swing.SwingHost(root);
+        hostWrite("ui", host.render());
+        String event;
+        while ((event = hostReadLine()) != null) {
+            try {
+                host.apply(event);
+            } catch (Throwable t) {
+                // As Swing does: a listener's exception is reported and the window carries on.
+                noteRuntimeFault(t, "a listener");
+                trim(t);
+                System.err.print("Exception in thread \"AWT-EventQueue-0\" ");
+                t.printStackTrace(System.err);
+            }
+            System.out.flush();
+            System.err.flush();
+            hostWrite("ui", host.render());
+        }
     }
 
     /** Flushes and disconnects the shared streams after a run. */
     private static void close() {
         System.out.flush();
         System.err.flush();
+        Thread.setDefaultUncaughtExceptionHandler(null);
+        current = null;
         Thread.currentThread().setContextClassLoader(Sandbox.class.getClassLoader());
         STDIN.use(InputStream.nullInputStream());
         STDOUT.use(OutputStream.nullOutputStream());
