@@ -88,9 +88,18 @@ export async function gradeQuestion(
       continue;
     }
     const runs: RunCache = new Map();
+    // What the student's code has not replied to (sivaku.harness.NoReply):
+    // later cases that need it fail without running, so an unfinished
+    // server costs one wait rather than one per case.
+    const silent = new Set<string>();
     for (const [i, testCase] of group) {
+      const blocked = testCase.needs?.find((need) => silent.has(need));
+      if (blocked) {
+        results[i] = caseResult(testCase, i, false, { reason: notRun(blocked) });
+        continue;
+      }
       try {
-        results[i] = await runCase(java, question, testCase, i, classPath, timeLimitMs, runs);
+        results[i] = await runCase(java, question, testCase, i, classPath, timeLimitMs, runs, silent);
       } catch (error) {
         if (error instanceof JavaStoppedError) throw error;
         results[i] = caseResult(testCase, i, false, { reason: failureReason(error, timeLimitMs) });
@@ -197,6 +206,12 @@ async function gradeJunit(java: JavaBackend, question: Question): Promise<CaseRe
   );
 }
 
+function notRun(need: string): string {
+  return need === "concurrent"
+    ? "Not run: in an earlier case, your server did not answer a second client while the first was connected."
+    : `Not run: in an earlier case, your code did not reply to ${need}.`;
+}
+
 function failureReason(error: unknown, timeLimitMs: number): string {
   return error instanceof JavaTimeoutError
     ? `Timed out: your code ran for more than ${timeLimitMs / 1000} seconds.`
@@ -264,6 +279,7 @@ async function runCase(
   classPath: string,
   timeLimitMs: number,
   runs: RunCache,
+  silent: Set<string> = new Set(),
 ): Promise<CaseResult> {
   const { kind } = question.tests;
 
@@ -277,10 +293,13 @@ async function runCase(
           activity: "running",
           timeoutMs: timeLimitMs,
         }))!,
-      ) as { passed: boolean; reason: string | null; runtimeFault: string | null };
+      ) as { passed: boolean; reason: string | null; runtimeFault: string | null; noReply?: string | null };
     };
     let outcome = await once();
-    if (testCase.concurrent) {
+    if (outcome.noReply && !outcome.runtimeFault) {
+      // Silence is not scheduling luck: no rerun, and later cases that need a reply are not run.
+      silent.add(outcome.noReply);
+    } else if (testCase.concurrent) {
       // A concurrent case depends on how CheerpJ schedules threads: it runs
       // up to CONCURRENT_RERUNS more times, each in a fresh class loader and
       // working folder, and passes if any run passes.

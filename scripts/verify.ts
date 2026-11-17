@@ -151,6 +151,9 @@ function checkQuestion(dir: string, question: Question, problems: Problems) {
       problems.push(`tests.json: ${c.name} checks neither files nor output`);
     }
     if (tests.kind === "harness" && !c.call) problems.push(`tests.json: ${c.name} has no "call"`);
+    if (c.needs !== undefined && (tests.kind !== "harness" || !Array.isArray(c.needs) || !c.needs.every((n) => typeof n === "string" && n))) {
+      problems.push(`tests.json: ${c.name}: "needs" is a list of names, for harness cases only`);
+    }
     if (c.concurrent !== undefined && (c.concurrent !== true || tests.kind !== "harness")) {
       problems.push(`tests.json: ${c.name}: "concurrent": true is for harness cases only`);
     }

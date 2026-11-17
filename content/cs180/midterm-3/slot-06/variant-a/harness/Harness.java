@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import sivaku.harness.Check;
+import sivaku.harness.NoReply;
 
 /**
  * Hidden tests for PointsHandler, through a server like PointsServer that
@@ -14,16 +15,37 @@ import sivaku.harness.Check;
 public class Harness {
     private static final int WAIT = 2000;
 
+    /** What a command needs a reply to, as tests.json "needs" names it: the command, or "other" for an ERROR. */
+    private static String need(String command) {
+        if (command.matches("ADD -?\\d+")) {
+            return "ADD";
+        }
+        return switch (command) {
+            case "SHOW", "RESET", "BYE" -> command;
+            default -> "other";
+        };
+    }
+
+    /** Sends a command and returns the reply; no reply within WAIT ends the case (NoReply). */
+    private static String ask(TestClient client, String command) throws Exception {
+        String reply = client.send(command);
+        if (reply.equals("(no reply)")) {
+            String shown = command.isEmpty() ? "an empty line" : command;
+            throw new NoReply(need(command), "no reply to " + shown + " within " + WAIT / 1000 + " seconds");
+        }
+        return reply;
+    }
+
     /** Sends each command on one new connection and returns the replies. */
     private static String conversation(String... commands) throws Exception {
         HiddenServer server = new HiddenServer();
         List<String> replies = new ArrayList<>();
         try (TestClient client = new TestClient(server.port(), WAIT)) {
             for (String command : commands) {
-                String reply = client.send(command);
+                String reply = ask(client, command);
                 replies.add(reply);
                 if (reply.startsWith("(")) {
-                    // No reply, or the connection closed: the rest would only wait.
+                    // The connection closed: the rest would get nothing.
                     break;
                 }
             }
@@ -40,7 +62,7 @@ public class Harness {
         List<String> replies = new ArrayList<>();
         try (TestClient client = new TestClient(listener.getLocalPort(), WAIT)) {
             for (String command : new String[] {"ADD 5", "ADD 3", "SHOW", "RESET", "JUMP", "BYE"}) {
-                String reply = client.send(command);
+                String reply = ask(client, command);
                 replies.add(reply);
                 if (reply.startsWith("(")) {
                     break;
@@ -70,8 +92,8 @@ public class Harness {
     public static void byeClosesAndReturns() throws Exception {
         HiddenServer server = new HiddenServer();
         try (TestClient client = new TestClient(server.port(), WAIT)) {
-            Check.equal("reply to ADD 1", "POINTS 1", client.send("ADD 1"));
-            Check.equal("reply to BYE", "BYE", client.send("BYE"));
+            Check.equal("reply to ADD 1", "POINTS 1", ask(client, "ADD 1"));
+            Check.equal("reply to BYE", "BYE", ask(client, "BYE"));
             Check.equal("the connection after BYE", "(closed)", client.read());
         }
         Check.equal("how handle ended", "[returned]", server.endings(1, WAIT).toString());
@@ -98,6 +120,7 @@ public class Harness {
         int clients = 6;
         CountDownLatch connected = new CountDownLatch(clients);
         String[] totals = new String[clients];
+        NoReply[] silence = new NoReply[1];
         List<Thread> threads = new ArrayList<>();
         for (int c = 0; c < clients; c++) {
             int me = c;
@@ -107,10 +130,13 @@ public class Harness {
                     connected.await(WAIT, TimeUnit.MILLISECONDS);
                     String reply = "";
                     for (int k = 0; k < 3 && !reply.startsWith("("); k++) {
-                        reply = client.send("ADD " + (me + 1));
+                        reply = ask(client, "ADD " + (me + 1));
                     }
-                    totals[me] = reply.startsWith("(") ? reply : client.send("SHOW");
-                    client.send("BYE");
+                    totals[me] = reply.startsWith("(") ? reply : ask(client, "SHOW");
+                    ask(client, "BYE");
+                } catch (NoReply e) {
+                    totals[me] = e.getMessage();
+                    silence[0] = e;
                 } catch (Exception e) {
                     totals[me] = "failed: " + e;
                 }
@@ -123,6 +149,9 @@ public class Harness {
             t.join(3 * WAIT);
         }
         server.close();
+        if (silence[0] != null) {
+            throw silence[0];
+        }
         List<String> expected = new ArrayList<>();
         for (int c = 0; c < clients; c++) {
             expected.add("POINTS " + 3 * (c + 1));
@@ -134,7 +163,7 @@ public class Harness {
     public static void hangUpWithoutBye() throws Exception {
         HiddenServer server = new HiddenServer();
         try (TestClient client = new TestClient(server.port(), WAIT)) {
-            Check.equal("reply to ADD 1", "POINTS 1", client.send("ADD 1"));
+            Check.equal("reply to ADD 1", "POINTS 1", ask(client, "ADD 1"));
         }
         Check.equal("how handle ended after the client hung up", "[returned]", server.endings(1, WAIT).toString());
         server.close();
@@ -150,13 +179,13 @@ public class Harness {
         HiddenServer server = new HiddenServer();
         try (TestClient first = new TestClient(server.port(), WAIT)) {
             for (String command : new String[] {"ADD 4", "SHOW", "RESET", "ADD x", "ADD 4"}) {
-                Check.isTrue("a reply to " + command, !first.send(command).startsWith("("));
+                Check.isTrue("a reply to " + command, !ask(first, command).startsWith("("));
                 Check.isTrue("only one reply to " + command, !first.extraLine(40));
             }
-            first.send("BYE");
+            ask(first, "BYE");
         }
         try (TestClient second = new TestClient(server.port(), WAIT)) {
-            Check.equal("a new client's SHOW after another client added 4", "POINTS 0", second.send("SHOW"));
+            Check.equal("a new client's SHOW after another client added 4", "POINTS 0", ask(second, "SHOW"));
         }
         server.close();
     }

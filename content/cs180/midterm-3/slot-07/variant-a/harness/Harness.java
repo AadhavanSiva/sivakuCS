@@ -6,6 +6,7 @@ import java.util.TreeSet;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import sivaku.harness.Check;
+import sivaku.harness.NoReply;
 
 /**
  * Hidden tests for the fixed TicketServer, on a slow store that sleeps
@@ -16,6 +17,29 @@ import sivaku.harness.Check;
  */
 public class Harness {
     private static final int WAIT = 2000;
+
+    /** What a command needs a reply to, as tests.json "needs" names it: the command, or "other" for an ERROR. */
+    private static String need(String command) {
+        return switch (command) {
+            case "HELLO", "TICKET", "BYE" -> command;
+            default -> "other";
+        };
+    }
+
+    /** Sends a command and returns the reply; no reply within WAIT ends the case (NoReply). */
+    private static String ask(TestClient client, String command) throws Exception {
+        return ask(client, command, need(command));
+    }
+
+    /** The same, naming what the missing reply means: e.g. "concurrent" for a second client. */
+    private static String ask(TestClient client, String command, String need) throws Exception {
+        String reply = client.send(command);
+        if (reply.equals("(no reply)")) {
+            String shown = command.isEmpty() ? "an empty line" : command;
+            throw new NoReply(need, "no reply to " + shown + " within " + WAIT / 1000 + " seconds");
+        }
+        return reply;
+    }
 
     /** The student's server on its own thread, with a store starting at `start`. */
     static final class Running {
@@ -58,6 +82,7 @@ public class Harness {
         CountDownLatch served = new CountDownLatch(clients);
         long deadline = System.currentTimeMillis() + WAIT;
         List<String> late = Collections.synchronizedList(new ArrayList<>());
+        NoReply[] silence = new NoReply[1];
         List<Integer> numbers = Collections.synchronizedList(new ArrayList<>());
         List<String> problems = Collections.synchronizedList(new ArrayList<>());
         List<Thread> threads = new ArrayList<>();
@@ -67,7 +92,7 @@ public class Harness {
                     connected.countDown();
                     connected.await(WAIT, TimeUnit.MILLISECONDS);
                     for (int k = 0; k < each; k++) {
-                        String reply = client.send("TICKET");
+                        String reply = ask(client, "TICKET");
                         if (reply.startsWith("TICKET ")) {
                             numbers.add(Integer.parseInt(reply.substring(7)));
                         } else {
@@ -78,7 +103,9 @@ public class Harness {
                     if (!served.await(Math.max(0, deadline - System.currentTimeMillis()), TimeUnit.MILLISECONDS)) {
                         late.add("x");
                     }
-                    client.send("BYE");
+                    ask(client, "BYE");
+                } catch (NoReply e) {
+                    silence[0] = e;
                 } catch (Exception e) {
                     problems.add(e.toString());
                 }
@@ -89,6 +116,9 @@ public class Harness {
         }
         for (Thread t : threads) {
             t.join(4 * WAIT);
+        }
+        if (silence[0] != null) {
+            throw silence[0];
         }
         Check.equal("replies to TICKET that were not a ticket", "[]", problems.toString());
         Check.isTrue("all " + clients + " clients were served while all were connected", late.isEmpty());
@@ -111,7 +141,7 @@ public class Harness {
         for (int visitor = 1; visitor <= 2; visitor++) {
             try (TestClient client = new TestClient(listener.getLocalPort(), WAIT)) {
                 for (String command : new String[] {"HELLO", "TICKET", "BYE"}) {
-                    replies.add(client.send(command));
+                    replies.add(ask(client, command));
                 }
             }
         }
@@ -123,14 +153,14 @@ public class Harness {
     public static void secondClientWhileFirstIsConnected() throws Exception {
         Running running = new Running(0);
         try (TestClient first = running.client()) {
-            Check.equal("the first client's HELLO", "WELCOME", first.send("HELLO"));
+            Check.equal("the first client's HELLO", "WELCOME", ask(first, "HELLO"));
             try (TestClient second = running.client()) {
-                Check.equal("a second client's HELLO while the first is still connected", "WELCOME", second.send("HELLO"));
-                Check.equal("the second client's TICKET", "TICKET 1", second.send("TICKET"));
-                second.send("BYE");
+                Check.equal("a second client's HELLO while the first is still connected", "WELCOME", ask(second, "HELLO", "concurrent"));
+                Check.equal("the second client's TICKET", "TICKET 1", ask(second, "TICKET"));
+                ask(second, "BYE");
             }
-            Check.equal("the first client's TICKET after that", "TICKET 2", first.send("TICKET"));
-            first.send("BYE");
+            Check.equal("the first client's TICKET after that", "TICKET 2", ask(first, "TICKET"));
+            ask(first, "BYE");
         }
         running.stop();
     }
@@ -139,7 +169,7 @@ public class Harness {
         Running running = new Running(5);
         try (TestClient client = running.client()) {
             Check.equal("replies to HELLO, TICKET, TICKET, BYE", "WELCOME | TICKET 6 | TICKET 7 | BYE",
-                    String.join(" | ", client.send("HELLO"), client.send("TICKET"), client.send("TICKET"), client.send("BYE")));
+                    String.join(" | ", ask(client, "HELLO"), ask(client, "TICKET"), ask(client, "TICKET"), ask(client, "BYE")));
         }
         running.stop();
     }
@@ -148,7 +178,7 @@ public class Harness {
         Running running = new Running(0);
         try (TestClient client = running.client()) {
             Check.equal("replies to hello, an empty line, TICKETS, TICKET", "ERROR | ERROR | ERROR | TICKET 1",
-                    String.join(" | ", client.send("hello"), client.send(""), client.send("TICKETS"), client.send("TICKET")));
+                    String.join(" | ", ask(client, "hello"), ask(client, ""), ask(client, "TICKETS"), ask(client, "TICKET")));
         }
         running.stop();
     }
@@ -163,11 +193,11 @@ public class Harness {
     public static void byeClosesAndTheServerCarriesOn() throws Exception {
         Running running = new Running(0);
         try (TestClient client = running.client()) {
-            Check.equal("reply to BYE", "BYE", client.send("BYE"));
+            Check.equal("reply to BYE", "BYE", ask(client, "BYE"));
             Check.equal("the connection after BYE", "(closed)", client.read());
         }
         try (TestClient next = running.client()) {
-            Check.equal("the next client's TICKET", "TICKET 1", next.send("TICKET"));
+            Check.equal("the next client's TICKET", "TICKET 1", ask(next, "TICKET"));
         }
         running.stop();
     }

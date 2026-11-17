@@ -311,7 +311,7 @@ public final class Sandbox {
                     }
                 }
                 if (element instanceof InvokeInstruction call && call.opcode() == Opcode.INVOKEVIRTUAL
-                        && isThrowableOwner(call.owner().asInternalName())) {
+                        && isThrowable(call.owner().asInternalName(), classesDir, cf)) {
                     // e.printStackTrace() and e.getStackTrace() go through
                     // guards that never read the stack trace of an exception
                     // the runtime threw itself (see thrownByRuntime).
@@ -360,10 +360,32 @@ public final class Sandbox {
             "printStackTraceOf(Ljava/lang/Throwable;Ljava/io/PrintWriter;)V",
             "stackTraceOf(Ljava/lang/Throwable;)[Ljava/lang/StackTraceElement;");
 
-    /** Throwable, or a class named like an exception or error (the student's own included). */
-    private static boolean isThrowableOwner(String internalName) {
-        return internalName.equals("java/lang/Throwable") || internalName.endsWith("Exception")
-                || internalName.endsWith("Error");
+    /**
+     * Whether a class is Throwable or extends it: a class just compiled is
+     * read from its class file (a student's own exception, whatever its
+     * name), any other is looked up without initialising it.
+     */
+    private static boolean isThrowable(String internalName, Path classesDir, ClassFile cf) {
+        for (String name = internalName; name != null; ) {
+            if (name.equals("java/lang/Throwable")) {
+                return true;
+            }
+            Path file = classesDir.resolve(name + ".class");
+            if (!Files.exists(file)) {
+                try {
+                    Class<?> known = Class.forName(name.replace('/', '.'), false, Sandbox.class.getClassLoader());
+                    return Throwable.class.isAssignableFrom(known);
+                } catch (ClassNotFoundException | LinkageError e) {
+                    return false;
+                }
+            }
+            try {
+                name = cf.parse(Files.readAllBytes(file)).superclass().map(c -> c.asInternalName()).orElse(null);
+            } catch (IOException | IllegalArgumentException e) {
+                return false;
+            }
+        }
+        return false;
     }
 
     /** What e.printStackTrace() becomes. */
@@ -371,20 +393,26 @@ public final class Sandbox {
         printStackTraceOf(t, System.err);
     }
 
-    /** What e.printStackTrace(stream) becomes. */
+    /**
+     * What e.printStackTrace(stream) becomes: Java's own output, without the
+     * sandbox's frames below main (as the java launcher shows it). An
+     * exception the runtime threw itself prints only its first line.
+     */
     public static void printStackTraceOf(Throwable t, PrintStream stream) {
         if (thrownByRuntime(t)) {
-            stream.println(t.getClass().getName() + " (inside the Java runtime)");
+            stream.println(t);
         } else {
+            trim(t);
             t.printStackTrace(stream);
         }
     }
 
-    /** What e.printStackTrace(writer) becomes. */
+    /** What e.printStackTrace(writer) becomes; see printStackTraceOf(Throwable, PrintStream). */
     public static void printStackTraceOf(Throwable t, PrintWriter writer) {
         if (thrownByRuntime(t)) {
-            writer.println(t.getClass().getName() + " (inside the Java runtime)");
+            writer.println(t);
         } else {
+            trim(t);
             t.printStackTrace(writer);
         }
     }
@@ -554,6 +582,7 @@ public final class Sandbox {
         Capture out = new Capture();
         Capture err = new Capture();
         String reason = null;
+        String noReply = null;
         long start = System.nanoTime();
         RunOptions parsed = RunOptions.parse(options);
         try (RunLoader loader = open(classPath, InputStream.nullInputStream(), out, err, parsed)) {
@@ -571,6 +600,9 @@ public final class Sandbox {
             }
         } catch (InvocationTargetException e) {
             reason = describeFailure(e.getCause());
+            if (e.getCause() instanceof sivaku.harness.NoReply silent) {
+                noReply = silent.need();
+            }
         } catch (ReflectiveOperationException | LinkageError e) {
             // The harness itself is broken, or could not link against the
             // student's classes (a method the student renamed, say).
@@ -589,6 +621,7 @@ public final class Sandbox {
                 + ",\"stdout\":" + json(out.text())
                 + ",\"stderr\":" + json(err.text())
                 + ",\"runtimeFault\":" + json(runtimeFault)
+                + ",\"noReply\":" + json(noReply)
                 + ",\"ms\":" + ms + "}";
     }
 
@@ -833,7 +866,7 @@ public final class Sandbox {
     private static void reportUncaught(Throwable t) {
         trim(t);
         if (thrownByRuntime(t)) {
-            System.err.println("Exception in thread \"main\" " + t.getClass().getName() + " (inside the Java runtime)");
+            System.err.println("Exception in thread \"main\" " + t);
             return;
         }
         StringWriter text = new StringWriter();
@@ -858,10 +891,10 @@ public final class Sandbox {
         return false;
     }
 
-    /** printStackTrace to System.err, or just the class for an exception the runtime threw. */
+    /** printStackTrace to System.err; for an exception the runtime threw, only its first line (type and message). */
     static void printTrace(Throwable t) {
         if (thrownByRuntime(t)) {
-            System.err.println(t.getClass().getName() + " (inside the Java runtime)");
+            System.err.println(t);
         } else {
             t.printStackTrace(System.err);
         }

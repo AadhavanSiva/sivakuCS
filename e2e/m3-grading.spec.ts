@@ -8,14 +8,14 @@
 // - The Swing fakes cover the components' methods, and Run draws a Swing
 //   question's panel as HTML.
 // - Every Midterm 3 broken solution grades the same in the browser.
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { CONTENT_ROOT, loadBrokenVariants, loadExam, loadSolution, questionDirs } from "../lib/content/load";
+import { CONTENT_ROOT, loadBrokenVariants, loadExam, loadQuestion, loadSolution, questionDirs } from "../lib/content/load";
 import { gradeQuestion } from "../lib/grading/grade";
 import type { GradeResult, Question } from "../lib/grading/types";
-import type { JavaBackend } from "../lib/java/backend";
-import type { JavaFiles } from "../lib/java/programs";
+import { type JavaBackend, sandboxDirs } from "../lib/java/backend";
+import { type JavaFiles, compileFiles, prepareWorkDir, runCompiled } from "../lib/java/programs";
 import { LocalJava } from "../scripts/lib/local-java";
 import { JVM_START_TIMEOUT, inBrowser, openExam } from "./helpers";
 
@@ -207,6 +207,127 @@ test("Midterm 3 starters and solutions grade the same in the browser as on the J
   } finally {
     await local.close();
   }
+});
+
+// ---- unfinished socket answers finish quickly -------------------------------------
+
+/**
+ * Test on Q6 or Q7 with code that does not reply: each wait is 2 s, and
+ * once something gets no reply, later cases that need it are not run
+ * (tests.json "needs"), so the whole question takes seconds, not minutes.
+ */
+const UNFINISHED: { slot: string; name: string; files: () => JavaFiles }[] = [
+  { slot: "slot-06", name: "the starter", files: () => loadQuestion(m3("slot-06")).starter },
+  { slot: "slot-06", name: "a handler that never answers RESET or unknown commands", files: () => ({ "PointsHandler.java": fixture("PointsHandlerPartial.java") }) },
+  { slot: "slot-07", name: "the starter (one client at a time)", files: () => loadQuestion(m3("slot-07")).starter },
+  { slot: "slot-07", name: "threads, but handle is synchronized", files: () => ({ "TicketServer.java": fixture("TicketServerSerial.java") }) },
+  { slot: "slot-07", name: "threads, but TICKET gets no reply", files: () => ({ "TicketServer.java": fixture("TicketServerNoTicketReply.java") }) },
+];
+const m3 = (slot: string) => join(CONTENT_ROOT, "cs180", "midterm-3", slot, "variant-a");
+const fixture = (name: string) => readFileSync(join("e2e", "fixtures", "sockets", name), "utf8");
+
+async function timeUnfinished(java: JavaBackend, where: string) {
+  // The browser's compiler warm-up runs once Java is ready; let it finish
+  // first, as it has by the time a student has written anything.
+  await compileFiles(java, { "Main.java": "void main() { }" });
+  const times: string[] = [];
+  for (const { slot, name, files } of UNFINISHED) {
+    const started = Date.now();
+    const graded = await gradeQuestion(java, loadQuestion(m3(slot)), files());
+    const seconds = (Date.now() - started) / 1000;
+    times.push(`${slot} ${name}: ${seconds.toFixed(1)} s, ${graded.score}/${graded.maxScore}`);
+    expect(seconds, `${where}: Test on ${slot}, ${name}`).toBeLessThanOrEqual(10);
+  }
+  test.info().annotations.push({ type: where, description: times.join("; ") });
+}
+
+test("Test on an unfinished Q6 or Q7 answer finishes within 10 seconds (JDK)", async () => {
+  const java = new LocalJava();
+  try {
+    await timeUnfinished(java, "JDK");
+  } finally {
+    await java.close();
+  }
+});
+
+test("Test on an unfinished Q6 or Q7 answer finishes within 10 seconds (browser)", async ({ page }) => {
+  test.setTimeout(5 * 60_000);
+  await timeUnfinished(await inBrowser(page), "browser");
+});
+
+// ---- e.printStackTrace() after the rewrite ---------------------------------------
+
+// The sandbox rewrites students' e.printStackTrace() and e.getStackTrace()
+// to guards (they must never read the stack trace of an exception CheerpJ
+// threw itself: that crashes the tab on Linux). An ordinary exception must
+// still print as Java prints it: the type and message, its frames, and
+// "Caused by:" for a cause.
+const PRINTS: JavaFiles = {
+  "Main.java": `public class Main {
+    static class OutOfStock extends Exception {
+        OutOfStock(String message) { super(message); }
+    }
+
+    static void sell(int wanted) throws OutOfStock {
+        if (wanted > 3) throw new OutOfStock("only 3 left, " + wanted + " wanted");
+    }
+
+    public static void main(String[] args) {
+        try {
+            Integer.parseInt("12x");
+        } catch (NumberFormatException e) {
+            e.printStackTrace();
+        }
+        try {
+            sell(5);
+        } catch (OutOfStock e) {
+            e.printStackTrace(System.out);
+            System.out.println("frames: " + e.getStackTrace().length);
+        }
+        new IllegalStateException("outer", new IllegalArgumentException("inner")).printStackTrace();
+        try {
+            int[] counts = new int[2];
+            counts[5]++;
+        } catch (ArrayIndexOutOfBoundsException e) {
+            e.printStackTrace();
+        }
+    }
+}`,
+};
+
+async function printed(java: JavaBackend) {
+  const compiled = await compileFiles(java, PRINTS);
+  expect(compiled.ok, compiled.output).toBe(true);
+  await prepareWorkDir(java, {});
+  return runCompiled(java, sandboxDirs(java.paths).classes, "Main", "", 10_000, "");
+}
+
+function checkPrinted(run: { stdout: string; stderr: string }) {
+  const err = run.stderr.replace(/\r\n/g, "\n");
+  const out = run.stdout.replace(/\r\n/g, "\n");
+  expect(err).toMatch(/^java\.lang\.NumberFormatException: For input string: "12x"\n\tat /);
+  expect(out).toMatch(/^Main\$OutOfStock: only 3 left, 5 wanted\n\tat Main\.sell\(/);
+  expect(out).toMatch(/\nframes: [1-9]/);
+  expect(err).toMatch(/\njava\.lang\.IllegalStateException: outer\n(\tat [^\n]+\n)+Caused by: java\.lang\.IllegalArgumentException: inner\n/);
+  // As the java launcher shows it: nothing of the sandbox below main.
+  expect(err + out).not.toContain("sivaku.sandbox");
+  expect(err).toMatch(/\njava\.lang\.ArrayIndexOutOfBoundsException/);
+}
+
+test("e.printStackTrace() on an ordinary exception prints as Java does, after the rewrite (JDK and browser)", async ({ page }) => {
+  test.setTimeout(5 * 60_000);
+  const local = new LocalJava();
+  try {
+    const jdk = await printed(local);
+    checkPrinted(jdk);
+    test.info().annotations.push({ type: "JDK stdout", description: jdk.stdout }, { type: "JDK stderr", description: jdk.stderr });
+  } finally {
+    await local.close();
+  }
+  const browser = await printed(await inBrowser(page));
+  checkPrinted(browser);
+  test.info().annotations.push({ type: "browser stdout", description: browser.stdout }, { type: "browser stderr", description: browser.stderr });
+  writeFileSync("test-results/print-stack-trace.txt", `--- browser stdout\n${browser.stdout}\n--- browser stderr\n${browser.stderr}\n`);
 });
 
 // ---- the Swing fakes ----------------------------------------------------------------

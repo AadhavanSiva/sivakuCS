@@ -233,7 +233,7 @@ times below are from a Windows laptop.
   a fresh JVM.
 - **The CheerpJ bug behind it** has a minimal reproduction in
   `java/proofs/m3/cheerpj-thread-death` (plain CheerpJ, no sandbox) and a
-  draft report for Leaning Technologies (`REPORT.md` there). Eight threads
+  draft report of two bugs for Leaning Technologies (`REPORT.md` there). Eight threads
   each calling a `synchronized` method that sleeps: in a fresh JVM, one
   thread's first call throws an `ArrayIndexOutOfBoundsException` with no
   message (10 of 10 JVMs on Windows and on Linux), and calling the method
@@ -244,8 +244,13 @@ times below are from a Windows laptop.
   `ArrayIndexOutOfBoundsException` or `ClassCastException` without a
   message (the JDK always gives those one): not in its uncaught-exception
   handler, not when deciding whether CheerpJ threw, and not in the run's
-  code, whose `e.printStackTrace()` and `e.getStackTrace()` calls are
-  rewritten to guarded versions. The nightly `cheerpj-bug` job reruns the
+  code, whose `e.printStackTrace()` and `e.getStackTrace()` calls (on any
+  class that extends `Throwable`, the student's own included) are rewritten
+  to guarded versions. For an ordinary exception the guard prints exactly
+  what Java prints, minus the sandbox's frames below `main`, as the java
+  launcher shows it; a messageless `ArrayIndexOutOfBoundsException` or
+  `ClassCastException` (CheerpJ gives its own index and cast checks no
+  message) prints only its first line. The nightly `cheerpj-bug` job reruns the
   reproduction, so a CheerpJ release that fixes it shows.
 - **CheerpJ's own failures are rerun once.** The sandbox notes an
   exception with no stack frame from the run's own classes (student, given,
@@ -280,6 +285,14 @@ times below are from a Windows laptop.
   a free one, closing a stream closes the socket). The network is reset
   before and after each run, closing every server and socket, so no thread
   of a run stays blocked in `accept()` or `readLine()`.
+- **Unfinished socket answers fail fast.** A hidden test waits 2 s for each
+  reply; with none, it throws `sivaku.harness.NoReply`, naming what got no
+  reply (a command, or `concurrent` for a second client while the first is
+  connected). The grader then fails, without running them, the later cases
+  whose tests.json `"needs"` include it, and does not rerun the case. So
+  Test on Q6's or Q7's starter, or on an answer that never replies to one
+  command, takes 2 to 8 s in the browser (measured; `e2e/m3-grading.spec.ts`
+  requires 10 s at most), while other cases still earn their points.
 - **Thread questions in 20 fresh browser JVMs** (`e2e/m3-threads-stress.spec.ts`,
   nightly): every question with concurrent cases, every correct solution
   graded and run as the Test and Run buttons do, and every broken one
@@ -581,7 +594,7 @@ The kinds of test:
 |---|---|---|
 | `stdio` | `stdin`, and `stdout`, `outputLine` or `labelledLines` | running `Main` with that input prints exactly that output, that line, or those lines |
 | `files` | `inputFiles` (left out for none), `outputFiles` (`null` means "must not exist"), optionally an output check as for `stdio` | the files after the run, and the output if given, are exactly as expected |
-| `harness` | `call`: a public static method of the harness class; `"concurrent": true` if it starts threads (a failed one runs up to twice more) | the method returns rather than throwing |
+| `harness` | `call`: a public static method of the harness class; `"concurrent": true` if it starts threads (a failed one runs up to twice more); `"needs"`: what it needs the student's code to reply to (see Sockets above) | the method returns rather than throwing |
 | `junit` | `implementation` (a folder in implementations/) and `expect`: `"pass"` or `"catch"`; tests.json names the `testClass` | the student's tests all pass on it ("pass", the correct class) or one fails ("catch", a buggy one); any failure on the correct class makes every case fail |
 
 For Ed's Midterm 1 pattern, one test per output line, give each case an

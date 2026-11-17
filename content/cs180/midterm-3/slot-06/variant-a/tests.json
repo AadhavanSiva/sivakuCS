@@ -2,17 +2,17 @@
   "kind": "harness",
   "timeLimitMs": 15000,
   "cases": [
-    { "name": "Sample from the handout", "points": 0, "sample": true, "call": "sampleFromTheHandout" },
-    { "name": "Case 1", "points": 2, "call": "addKeepsARunningTotal" },
-    { "name": "Case 2", "points": 2, "call": "showAtTheStartAndLater" },
-    { "name": "Case 3", "points": 2, "call": "resetStartsAgain" },
-    { "name": "Case 4", "points": 2, "call": "byeClosesAndReturns" },
-    { "name": "Case 5", "points": 2, "call": "unknownCommands" },
-    { "name": "Case 6", "points": 2, "call": "addWithoutAWholeNumber" },
-    { "name": "Case 7", "points": 2, "call": "emptyLine" },
-    { "name": "Case 8", "points": 1, "call": "severalClientsAtOnce", "concurrent": true },
-    { "name": "Case 9", "points": 1, "call": "hangUpWithoutBye" },
-    { "name": "Case 10", "points": 1, "call": "wrongNumberOfWords" },
-    { "name": "Case 11", "points": 1, "call": "oneReplyPerCommandAndAFreshStart" }
+    {"name": "Sample from the handout", "points": 0, "sample": true, "call": "sampleFromTheHandout", "needs": ["ADD", "SHOW", "RESET", "other", "BYE"]},
+    {"name": "Case 1", "points": 2, "call": "addKeepsARunningTotal", "needs": ["ADD"]},
+    {"name": "Case 2", "points": 2, "call": "showAtTheStartAndLater", "needs": ["SHOW", "ADD"]},
+    {"name": "Case 3", "points": 2, "call": "resetStartsAgain", "needs": ["ADD", "RESET", "SHOW"]},
+    {"name": "Case 4", "points": 2, "call": "byeClosesAndReturns", "needs": ["ADD", "BYE"]},
+    {"name": "Case 5", "points": 2, "call": "unknownCommands", "needs": ["other", "SHOW"]},
+    {"name": "Case 6", "points": 2, "call": "addWithoutAWholeNumber", "needs": ["other", "ADD", "SHOW"]},
+    {"name": "Case 7", "points": 2, "call": "emptyLine", "needs": ["other", "ADD", "SHOW"]},
+    {"name": "Case 8", "points": 1, "call": "severalClientsAtOnce", "concurrent": true, "needs": ["ADD", "SHOW", "BYE"]},
+    {"name": "Case 9", "points": 1, "call": "hangUpWithoutBye", "needs": ["ADD"]},
+    {"name": "Case 10", "points": 1, "call": "wrongNumberOfWords", "needs": ["other", "SHOW"]},
+    {"name": "Case 11", "points": 1, "call": "oneReplyPerCommandAndAFreshStart", "needs": ["ADD", "SHOW", "RESET", "other", "BYE"]}
   ]
 }

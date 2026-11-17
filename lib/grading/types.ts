@@ -89,6 +89,13 @@ export type TestCase = {
    * class loader, and passes if any run passes (CONCURRENT_RERUNS in grade.ts).
    */
   concurrent?: boolean;
+  /**
+   * harness: what this case needs the student's code to reply to (for a
+   * socket question, the commands it sends, or "concurrent"). Once a case
+   * gets no reply to one of them (the harness throws sivaku.harness.NoReply),
+   * later cases that need it fail without running.
+   */
+  needs?: string[];
 };
 
 /** The lines of the output that start with `prefix`, in order. */

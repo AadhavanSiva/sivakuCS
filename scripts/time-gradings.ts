@@ -34,7 +34,11 @@ async function main() {
           `${testCase.name.replace("Sample from the handout", "S")} ${Date.now() - started}${graded.passed ? "" : "✗"}`,
         );
       }
-      console.log(`${name.padEnd(36)} ${times.join("  ")}`);
+      // The whole question in one grading, as Test runs it (later cases can be skipped).
+      const started = Date.now();
+      const whole = await gradeQuestion(java, question, files);
+      const total = `whole ${((Date.now() - started) / 1000).toFixed(1)} s, ${whole.score}/${whole.maxScore}`;
+      console.log(`${name.padEnd(36)} ${total.padEnd(20)} ${times.join("  ")}`);
     }
   } finally {
     await java.close();

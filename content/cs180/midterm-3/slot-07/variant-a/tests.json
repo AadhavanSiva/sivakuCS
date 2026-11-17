@@ -2,14 +2,14 @@
   "kind": "harness",
   "timeLimitMs": 15000,
   "cases": [
-    { "name": "Sample from the handout", "points": 0, "sample": true, "call": "sampleFromTheHandout" },
-    { "name": "Case 1", "points": 4, "call": "secondClientWhileFirstIsConnected", "concurrent": true },
-    { "name": "Case 2", "points": 2, "call": "oneClientTakesTickets" },
-    { "name": "Case 3", "points": 1, "call": "unknownCommands" },
-    { "name": "Case 4", "points": 2, "call": "manyClientsGetDifferentNumbers", "concurrent": true },
-    { "name": "Case 5", "points": 1, "call": "byeClosesAndTheServerCarriesOn" },
-    { "name": "Case 6", "points": 2, "call": "manyClientsLeaveNoGaps", "concurrent": true },
-    { "name": "Case 7", "points": 2, "call": "storeHoldsTheLastNumber", "concurrent": true },
-    { "name": "Case 8", "points": 2, "call": "numbersContinueFromTheStore", "concurrent": true }
+    {"name": "Sample from the handout", "points": 0, "sample": true, "call": "sampleFromTheHandout", "needs": ["HELLO", "TICKET", "BYE"]},
+    {"name": "Case 1", "points": 4, "call": "secondClientWhileFirstIsConnected", "concurrent": true, "needs": ["HELLO", "TICKET", "BYE", "concurrent"]},
+    {"name": "Case 2", "points": 2, "call": "oneClientTakesTickets", "needs": ["HELLO", "TICKET", "BYE"]},
+    {"name": "Case 3", "points": 1, "call": "unknownCommands", "needs": ["other", "TICKET"]},
+    {"name": "Case 4", "points": 2, "call": "manyClientsGetDifferentNumbers", "concurrent": true, "needs": ["TICKET", "BYE", "concurrent"]},
+    {"name": "Case 5", "points": 1, "call": "byeClosesAndTheServerCarriesOn", "needs": ["BYE", "TICKET"]},
+    {"name": "Case 6", "points": 2, "call": "manyClientsLeaveNoGaps", "concurrent": true, "needs": ["TICKET", "BYE", "concurrent"]},
+    {"name": "Case 7", "points": 2, "call": "storeHoldsTheLastNumber", "concurrent": true, "needs": ["TICKET", "BYE", "concurrent"]},
+    {"name": "Case 8", "points": 2, "call": "numbersContinueFromTheStore", "concurrent": true, "needs": ["TICKET", "BYE", "concurrent"]}
   ]
 }
