@@ -10,11 +10,13 @@ import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.classfile.ClassFile;
+import java.lang.classfile.ClassHierarchyResolver;
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.ClassTransform;
 import java.lang.classfile.CodeTransform;
 import java.lang.classfile.Opcode;
 import java.lang.classfile.instruction.InvokeInstruction;
+import java.lang.classfile.instruction.NewObjectInstruction;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
@@ -221,7 +223,7 @@ public final class Sandbox {
                 .replace(src.toString() + "/", "")
                 .replace(src.toString() + "\\", "");
         if (code == 0) {
-            redirectExits(Path.of(outDir));
+            rewriteClasses(Path.of(outDir));
         }
         long ms = (System.nanoTime() - start) / 1_000_000;
         return "{\"ok\":" + (code == 0) + ",\"output\":" + json(output) + ",\"ms\":" + ms + "}";
@@ -231,18 +233,55 @@ public final class Sandbox {
     private static final ClassDesc RUNTIME = ClassDesc.of("java.lang.Runtime");
     private static final ClassDesc SANDBOX = ClassDesc.of("sivaku.sandbox.Sandbox");
     private static final MethodTypeDesc INT_TO_VOID = MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int);
+    private static final ClassDesc SOCKET = ClassDesc.of("java.net.Socket");
+    private static final ClassDesc SERVER_SOCKET = ClassDesc.of("java.net.ServerSocket");
+    private static final ClassDesc FAKE_SOCKET = ClassDesc.of("sivaku.net.FakeSocket");
+    private static final ClassDesc FAKE_SERVER_SOCKET = ClassDesc.of("sivaku.net.FakeServerSocket");
+
+    /** The fake a created socket class becomes, or null. */
+    private static ClassDesc fakeFor(ClassDesc type) {
+        if (type.equals(SOCKET)) {
+            return FAKE_SOCKET;
+        }
+        if (type.equals(SERVER_SOCKET)) {
+            return FAKE_SERVER_SOCKET;
+        }
+        return null;
+    }
 
     /**
-     * Rewrites System.exit, Runtime.exit and Runtime.halt in the compiled
-     * classes to throw an {@link ExitSignal} instead.
+     * Rewrites the compiled classes (Rewriting the bytecode rather than the
+     * source keeps line numbers and string literals exactly as the student
+     * wrote them):
      *
-     * <p>In CheerpJ a real System.exit ends the whole JVM in the worker, so
-     * the run never reports back and every later call fails. Rewriting the
-     * bytecode (rather than the source) keeps line numbers and string
-     * literals exactly as the student wrote them.
+     * <ul>
+     *   <li>System.exit, Runtime.exit and Runtime.halt throw an
+     *       {@link ExitSignal} instead. In CheerpJ a real System.exit ends the
+     *       whole JVM in the worker, so the run never reports back and every
+     *       later call fails.</li>
+     *   <li>{@code new Socket(...)} and {@code new ServerSocket(...)} create
+     *       {@link sivaku.net.FakeSocket} and {@link sivaku.net.FakeServerSocket},
+     *       subclasses on an in-memory network: real sockets cannot work in
+     *       CheerpJ (java/proofs/m3/sockets). Every compile is rewritten, the
+     *       student's, the given files' and the hidden tests', so all of them
+     *       meet on the same simulated network, on the JDK as in the browser.</li>
+     * </ul>
      */
-    private static void redirectExits(Path classesDir) throws IOException {
-        ClassFile cf = ClassFile.of();
+    private static void rewriteClasses(Path classesDir) throws IOException {
+        // Stack maps are regenerated, which needs the class hierarchy: the
+        // JDK's, the sandbox's (the fakes) and the classes just compiled.
+        ClassFile cf = ClassFile.of(ClassFile.ClassHierarchyResolverOption.of(
+                ClassHierarchyResolver.defaultResolver()
+                        .orElse(ClassHierarchyResolver.ofResourceParsing(Sandbox.class.getClassLoader()))
+                        .orElse(ClassHierarchyResolver.ofResourceParsing(desc -> {
+                            String internal = desc.descriptorString();
+                            Path file = classesDir.resolve(internal.substring(1, internal.length() - 1) + ".class");
+                            try {
+                                return Files.exists(file) ? Files.newInputStream(file) : null;
+                            } catch (IOException e) {
+                                return null;
+                            }
+                        }))));
         List<Path> classFiles;
         try (Stream<Path> walk = Files.walk(classesDir)) {
             classFiles = walk.filter(p -> p.toString().endsWith(".class")).toList();
@@ -251,6 +290,43 @@ public final class Sandbox {
             ClassModel model = cf.parse(Files.readAllBytes(file));
             boolean[] changed = {false};
             CodeTransform exits = (code, element) -> {
+                if (element instanceof NewObjectInstruction created) {
+                    ClassDesc fake = fakeFor(created.className().asSymbol());
+                    if (fake != null) {
+                        code.new_(fake);
+                        changed[0] = true;
+                        return;
+                    }
+                }
+                if (element instanceof InvokeInstruction call && call.opcode() == Opcode.INVOKESPECIAL
+                        && call.name().equalsString("<init>") && !model.thisClass().asSymbol().equals(FAKE_SOCKET)) {
+                    // The constructor call that goes with a rewritten new. (A
+                    // class extending Socket itself is left alone.)
+                    ClassDesc fake = fakeFor(call.owner().asSymbol());
+                    boolean superCall = model.superclass().map(c -> c.asSymbol().equals(call.owner().asSymbol())).orElse(false);
+                    if (fake != null && !superCall) {
+                        code.invokespecial(fake, "<init>", call.typeSymbol());
+                        changed[0] = true;
+                        return;
+                    }
+                }
+                if (element instanceof InvokeInstruction call && call.opcode() == Opcode.INVOKEVIRTUAL
+                        && isThrowableOwner(call.owner().asInternalName())) {
+                    // e.printStackTrace() and e.getStackTrace() go through
+                    // guards that never read the stack trace of an exception
+                    // the runtime threw itself (see thrownByRuntime).
+                    String name = call.name().stringValue();
+                    MethodTypeDesc type = call.typeSymbol();
+                    if (name.equals("printStackTrace") || name.equals("getStackTrace")) {
+                        MethodTypeDesc guard = type.insertParameterTypes(0, ConstantDescs.CD_Throwable);
+                        String target = name.equals("printStackTrace") ? "printStackTraceOf" : "stackTraceOf";
+                        if (GUARDED.contains(target + guard.descriptorString())) {
+                            code.invokestatic(SANDBOX, target, guard);
+                            changed[0] = true;
+                            return;
+                        }
+                    }
+                }
                 if (element instanceof InvokeInstruction call && call.typeSymbol().equals(INT_TO_VOID)) {
                     ClassDesc owner = call.owner().asSymbol();
                     String name = call.name().stringValue();
@@ -275,6 +351,47 @@ public final class Sandbox {
                 Files.write(file, rewritten);
             }
         }
+    }
+
+    /** The guards e.printStackTrace(...) and e.getStackTrace() calls are rewritten to, by name and descriptor. */
+    private static final java.util.Set<String> GUARDED = java.util.Set.of(
+            "printStackTraceOf(Ljava/lang/Throwable;)V",
+            "printStackTraceOf(Ljava/lang/Throwable;Ljava/io/PrintStream;)V",
+            "printStackTraceOf(Ljava/lang/Throwable;Ljava/io/PrintWriter;)V",
+            "stackTraceOf(Ljava/lang/Throwable;)[Ljava/lang/StackTraceElement;");
+
+    /** Throwable, or a class named like an exception or error (the student's own included). */
+    private static boolean isThrowableOwner(String internalName) {
+        return internalName.equals("java/lang/Throwable") || internalName.endsWith("Exception")
+                || internalName.endsWith("Error");
+    }
+
+    /** What e.printStackTrace() becomes. */
+    public static void printStackTraceOf(Throwable t) {
+        printStackTraceOf(t, System.err);
+    }
+
+    /** What e.printStackTrace(stream) becomes. */
+    public static void printStackTraceOf(Throwable t, PrintStream stream) {
+        if (thrownByRuntime(t)) {
+            stream.println(t.getClass().getName() + " (inside the Java runtime)");
+        } else {
+            t.printStackTrace(stream);
+        }
+    }
+
+    /** What e.printStackTrace(writer) becomes. */
+    public static void printStackTraceOf(Throwable t, PrintWriter writer) {
+        if (thrownByRuntime(t)) {
+            writer.println(t.getClass().getName() + " (inside the Java runtime)");
+        } else {
+            t.printStackTrace(writer);
+        }
+    }
+
+    /** What e.getStackTrace() becomes: empty for an exception the runtime threw. */
+    public static StackTraceElement[] stackTraceOf(Throwable t) {
+        return thrownByRuntime(t) ? new StackTraceElement[0] : t.getStackTrace();
     }
 
     /** What a student's System.exit(status) becomes. Not for any other use. */
@@ -544,6 +661,8 @@ public final class Sandbox {
                 urls.add(Path.of(entry).toUri().toURL());
             }
         }
+        // Each run starts on an empty simulated network.
+        sivaku.net.FakeNet.reset();
         RunLoader loader = new RunLoader(urls.toArray(URL[]::new), Sandbox.class.getClassLoader(), options.swing());
         Thread.currentThread().setContextClassLoader(loader);
         current = loader;
@@ -553,7 +672,7 @@ public final class Sandbox {
         Thread.setDefaultUncaughtExceptionHandler((thread, t) -> {
             noteRuntimeFault(t, "thread \"" + thread.getName() + "\"");
             System.err.print("Exception in thread \"" + thread.getName() + "\" ");
-            t.printStackTrace(System.err);
+            printTrace(t);
         });
         return loader;
     }
@@ -568,6 +687,12 @@ public final class Sandbox {
     static void noteRuntimeFault(Throwable t, String where) {
         RunLoader loader = current;
         if (loader == null || t instanceof ExitSignal) {
+            return;
+        }
+        if (thrownByRuntime(t)) {
+            if (runtimeFault == null) {
+                runtimeFault = where + ": " + t.getClass().getName() + " inside the Java runtime";
+            }
             return;
         }
         for (Throwable x = t; x != null; x = x.getCause()) {
@@ -629,7 +754,7 @@ public final class Sandbox {
                 noteRuntimeFault(t, "a listener");
                 trim(t);
                 System.err.print("Exception in thread \"AWT-EventQueue-0\" ");
-                t.printStackTrace(System.err);
+                printTrace(t);
             }
             System.out.flush();
             System.err.flush();
@@ -642,6 +767,9 @@ public final class Sandbox {
         System.out.flush();
         System.err.flush();
         Thread.setDefaultUncaughtExceptionHandler(null);
+        // Servers and sockets the run left open close, so no thread of it
+        // stays blocked in accept() or readLine().
+        sivaku.net.FakeNet.reset();
         current = null;
         Thread.currentThread().setContextClassLoader(Sandbox.class.getClassLoader());
         STDIN.use(InputStream.nullInputStream());
@@ -704,12 +832,45 @@ public final class Sandbox {
     /** Prints an uncaught exception the way the java launcher does, without the sandbox's own frames. */
     private static void reportUncaught(Throwable t) {
         trim(t);
+        if (thrownByRuntime(t)) {
+            System.err.println("Exception in thread \"main\" " + t.getClass().getName() + " (inside the Java runtime)");
+            return;
+        }
         StringWriter text = new StringWriter();
         t.printStackTrace(new PrintWriter(text));
         System.err.print("Exception in thread \"main\" " + text);
     }
 
+    /**
+     * Whether t, or a cause, is an exception CheerpJ throws when it fails
+     * itself (java/proofs/m3/cheerpj-thread-death): an
+     * ArrayIndexOutOfBoundsException or ClassCastException with no message,
+     * which the JDK always gives one. Its stack trace must never be read:
+     * getStackTrace() or printStackTrace() on it crashes the browser tab on
+     * Linux, and throws on Windows. Its class and message are safe.
+     */
+    static boolean thrownByRuntime(Throwable t) {
+        for (Throwable x = t; x != null; x = x.getCause()) {
+            if ((x instanceof ArrayIndexOutOfBoundsException || x instanceof ClassCastException) && x.getMessage() == null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** printStackTrace to System.err, or just the class for an exception the runtime threw. */
+    static void printTrace(Throwable t) {
+        if (thrownByRuntime(t)) {
+            System.err.println(t.getClass().getName() + " (inside the Java runtime)");
+        } else {
+            t.printStackTrace(System.err);
+        }
+    }
+
     private static void trim(Throwable t) {
+        if (thrownByRuntime(t)) {
+            return;
+        }
         for (Throwable x = t; x != null; x = x.getCause()) {
             StackTraceElement[] frames = x.getStackTrace();
             int keep = frames.length;

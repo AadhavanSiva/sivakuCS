@@ -67,3 +67,4 @@ reference-private/
 
 # Midterm 3 proof: the JUnit jar, downloaded by scripts/fetch-junit.mjs
 public/m3-proof/
+/java/proofs/m3/cheerpj-thread-death/repro.jar

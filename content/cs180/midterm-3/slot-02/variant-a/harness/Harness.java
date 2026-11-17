@@ -33,8 +33,13 @@ public class Harness {
      * any lock until all `racers` threads have called it (or 300 ms pass).
      * A take() that checks with count() and then changes the count in a
      * second step therefore has every racer check before any changes it, so
-     * it oversells every time, whatever the scheduler does. A correct take()
-     * never calls count(), so this changes nothing for it.
+     * it oversells every time, whatever the scheduler does.
+     *
+     * A correct take() either never calls count() or calls it while holding
+     * a lock, so no other racer can get past it: there is nothing to wait
+     * for, and count() returns at once. (A lock this cannot see, such as a
+     * private lock object, waits at most 300 ms per call, and only the first
+     * racers - 1 calls wait at all: under 3.5 s per case. Never a hang.)
      */
     private static SeedBank racing(Tally tally, int racers) {
         CountDownLatch everyone = new CountDownLatch(racers);
@@ -43,6 +48,9 @@ public class Harness {
             public int count() {
                 int held = super.count();
                 everyone.countDown();
+                if (Thread.holdsLock(this) || Thread.holdsLock(tally)) {
+                    return held;
+                }
                 try {
                     everyone.await(300, TimeUnit.MILLISECONDS);
                 } catch (InterruptedException e) {

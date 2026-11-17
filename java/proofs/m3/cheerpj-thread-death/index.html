@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>CheerpJ thread race</title>
+    <script src="https://cjrtnc.leaningtech.com/5.0/loader.js"></script>
+  </head>
+  <body>
+    <pre id="console"></pre>
+    <script>
+      // ?main=Repro&args=warm,quiet (comma-separated arguments)
+      (async () => {
+        await cheerpjInit({ version: 25, status: "none" });
+        const q = new URLSearchParams(location.search);
+        const args = q.get("args") ? q.get("args").split(",") : [];
+        const code = await cheerpjRunMain(q.get("main") ?? "Repro", "/app/repro.jar", ...args);
+        document.title = "done " + code;
+      })();
+    </script>
+  </body>
+</html>

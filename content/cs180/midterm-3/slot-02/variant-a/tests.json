@@ -7,9 +7,9 @@
     { "name": "Case 2", "points": 1, "call": "takeWhenEnough" },
     { "name": "Case 3", "points": 1, "call": "takeWhenTooFew" },
     { "name": "Case 4", "points": 1, "call": "takeExactlyAll" },
-    { "name": "Case 5", "points": 2, "call": "manyAddsTogether" },
-    { "name": "Case 6", "points": 2, "call": "raceForTheLastPackets" },
-    { "name": "Case 7", "points": 2, "call": "addsAndTakesTogether" },
-    { "name": "Case 8", "points": 2, "call": "raceToTakeSeveral" }
+    { "name": "Case 5", "points": 2, "call": "manyAddsTogether", "concurrent": true },
+    { "name": "Case 6", "points": 2, "call": "raceForTheLastPackets", "concurrent": true },
+    { "name": "Case 7", "points": 2, "call": "addsAndTakesTogether", "concurrent": true },
+    { "name": "Case 8", "points": 2, "call": "raceToTakeSeveral", "concurrent": true }
   ]
 }

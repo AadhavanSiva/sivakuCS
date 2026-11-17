@@ -83,6 +83,12 @@ export type TestCase = {
    */
   implementation?: string;
   expect?: "pass" | "catch";
+  /**
+   * harness: the case runs threads, so its outcome can depend on how they
+   * are scheduled. If it fails it runs up to two more times, each in a fresh
+   * class loader, and passes if any run passes (CONCURRENT_RERUNS in grade.ts).
+   */
+  concurrent?: boolean;
 };
 
 /** The lines of the output that start with `prefix`, in order. */

@@ -2,14 +2,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.lang.classfile.ClassFile;
-import java.lang.classfile.ClassHierarchyResolver;
-import java.lang.classfile.ClassTransform;
-import java.lang.classfile.CodeTransform;
-import java.lang.classfile.Opcode;
-import java.lang.classfile.instruction.InvokeInstruction;
-import java.lang.classfile.instruction.NewObjectInstruction;
-import java.lang.constant.ClassDesc;
 import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -27,11 +19,11 @@ import java.util.concurrent.atomic.AtomicReference;
  * graded? Prints one JSON object on standard output.
  *
  * <p>Part 1 tries real ServerSocket and Socket on localhost, with timeouts
- * so a runtime that hangs cannot stall the JVM. Part 2 proves the fallback:
- * student classes (args[0]) are loaded through a class loader that rewrites
- * {@code new Socket(...)} and {@code new ServerSocket(...)} into in-memory
- * fakes, the technique the sandbox already uses for System.exit; and a
- * handler is driven directly with a fake socket.
+ * so a runtime that hangs cannot stall the JVM. Part 2 checks the fallback,
+ * which the sandbox now applies to every compile: {@code new Socket(...)}
+ * and {@code new ServerSocket(...)} become in-memory fakes (sivaku.net), as
+ * System.exit is rewritten; a client, a server and a handler then behave as
+ * on a real network.
  */
 public class SocketsProof {
     public static void main(String[] args) throws Exception {
@@ -56,7 +48,9 @@ public class SocketsProof {
         AtomicReference<String> result = new AtomicReference<>();
         long start = System.nanoTime();
         Thread attempt = new Thread(() -> {
-            try (ServerSocket server = new ServerSocket(0, 50, InetAddress.getLoopbackAddress())) {
+            // Reflection, not new: the sandbox rewrites `new ServerSocket` to its fake.
+            try (ServerSocket server = ServerSocket.class.getConstructor(int.class, int.class, InetAddress.class)
+                    .newInstance(0, 50, InetAddress.getLoopbackAddress())) {
                 server.setSoTimeout(3000);
                 int port = server.getLocalPort();
                 AtomicReference<String> heard = new AtomicReference<>();
@@ -70,7 +64,7 @@ public class SocketsProof {
                     }
                 });
                 serverThread.start();
-                try (Socket client = new Socket()) {
+                try (Socket client = Socket.class.getConstructor().newInstance()) {
                     client.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 3000);
                     client.setSoTimeout(3000);
                     new PrintWriter(client.getOutputStream(), true).println("hello");
@@ -94,20 +88,21 @@ public class SocketsProof {
         return r + ",\"ms\":" + ms + "}";
     }
 
-    // ---- part 2: rewriting student code -------------------------------------
+    // ---- part 2: the sandbox's rewrite ---------------------------------------
 
-    /** Loads the student's classes itself (not its parent's), rewriting Socket and ServerSocket. */
+    /**
+     * Loads the student's classes itself (not its parent's). The sandbox now
+     * rewrites new Socket(...) and new ServerSocket(...) when it compiles
+     * (sivaku.net.FakeSocket and FakeServerSocket), so this only counts the
+     * classes that use the fakes.
+     */
     static final class RewritingLoader extends ClassLoader {
         private final Path dir;
         int rewritten;
-        private final ClassFile classFile;
 
         RewritingLoader(Path dir, ClassLoader parent) {
             super(parent);
             this.dir = dir;
-            // The stack maps are regenerated, so the class file API must be able to see the fakes.
-            this.classFile = ClassFile.of(ClassFile.ClassHierarchyResolverOption.of(
-                    ClassHierarchyResolver.defaultResolver().orElse(ClassHierarchyResolver.ofResourceParsing(parent))));
         }
 
         @Override
@@ -119,7 +114,10 @@ public class SocketsProof {
             Class<?> loaded = findLoadedClass(name);
             if (loaded == null) {
                 try {
-                    byte[] bytes = rewrite(Files.readAllBytes(file));
+                    byte[] bytes = Files.readAllBytes(file);
+                    if (new String(bytes, java.nio.charset.StandardCharsets.ISO_8859_1).contains("sivaku/net/Fake")) {
+                        rewritten++;
+                    }
                     loaded = defineClass(name, bytes, 0, bytes.length);
                 } catch (IOException e) {
                     throw new ClassNotFoundException(name, e);
@@ -130,44 +128,6 @@ public class SocketsProof {
             }
             return loaded;
         }
-
-        private static final ClassDesc SOCKET = ClassDesc.of("java.net.Socket");
-        private static final ClassDesc SERVER_SOCKET = ClassDesc.of("java.net.ServerSocket");
-        private static final ClassDesc FAKE_SOCKET = ClassDesc.of("FakeSocket");
-        private static final ClassDesc FAKE_SERVER_SOCKET = ClassDesc.of("FakeServerSocket");
-
-        private static ClassDesc swap(ClassDesc type) {
-            if (type.equals(SOCKET)) {
-                return FAKE_SOCKET;
-            }
-            if (type.equals(SERVER_SOCKET)) {
-                return FAKE_SERVER_SOCKET;
-            }
-            return null;
-        }
-
-        byte[] rewrite(byte[] bytes) {
-            CodeTransform fakes = (code, element) -> {
-                if (element instanceof NewObjectInstruction created) {
-                    ClassDesc to = swap(created.className().asSymbol());
-                    if (to != null) {
-                        code.new_(to);
-                        rewritten++;
-                        return;
-                    }
-                }
-                if (element instanceof InvokeInstruction call && call.opcode() == Opcode.INVOKESPECIAL
-                        && call.name().equalsString("<init>")) {
-                    ClassDesc to = swap(call.owner().asSymbol());
-                    if (to != null) {
-                        code.invokespecial(to, "<init>", call.typeSymbol());
-                        return;
-                    }
-                }
-                code.with(element);
-            };
-            return classFile.transformClass(classFile.parse(bytes), ClassTransform.transformingMethodBodies(fakes));
-        }
     }
 
     /** Topic E: the grader is the server; the student's client connects with new Socket(host, port). */
@@ -175,7 +135,7 @@ public class SocketsProof {
         long start = System.nanoTime();
         List<String> heard = Collections.synchronizedList(new ArrayList<>());
         AtomicReference<String> closedByClient = new AtomicReference<>("unknown");
-        FakeServerSocket server = new FakeServerSocket(5100);
+        ServerSocket server = new ServerSocket(5100);
         Thread serverThread = new Thread(() -> {
             try (Socket c = server.accept()) {
                 BufferedReader in = new BufferedReader(new InputStreamReader(c.getInputStream()));
@@ -240,7 +200,7 @@ public class SocketsProof {
     static Socket connectWhenListening(int port) throws Exception {
         for (int i = 0; ; i++) {
             try {
-                return new FakeSocket("localhost", port);
+                return new Socket("localhost", port);
             } catch (java.net.ConnectException e) {
                 if (i == 200) {
                     throw e;
@@ -253,7 +213,11 @@ public class SocketsProof {
     /** Topic F: the grader holds one end of a fake socket and hands the other to Handler.handle. */
     static String handlerWithFakeSocket(ClassLoader loader) throws Exception {
         long start = System.nanoTime();
-        FakeSocket[] ends = FakeSocket.pair();
+        // Two connected ends on the sandbox's simulated network.
+        ServerSocket listener = new ServerSocket(0);
+        Socket[] ends = {new Socket("localhost", listener.getLocalPort()), null};
+        ends[1] = listener.accept();
+        listener.close();
         Method handle = loader.loadClass("Handler").getMethod("handle", Socket.class);
         AtomicReference<String> failure = new AtomicReference<>();
         Thread handler = new Thread(() -> {

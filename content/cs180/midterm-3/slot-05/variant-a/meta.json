@@ -1,0 +1,7 @@
+{
+  "title": "Campsite booking",
+  "points": 14,
+  "editable": ["CampClient.java"],
+  "readOnly": ["Main.java", "CampServer.java"],
+  "reference": "sockets"
+}

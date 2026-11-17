@@ -90,6 +90,7 @@ Then open a new terminal and follow steps 5 to 8 above.
 | `npm run db:migrate` | Creates the tables in `db/schema.sql` in the database in `DATABASE_URL` (from `.env.local`). Safe to run again |
 | `npm run build:sandbox` | Rebuilds `public/cheerpj/sandbox.jar` from `java/sandbox` (needs JDK 25) |
 | `npm run check:cheerpj` | Fails if the CheerpJ runtime on its CDN no longer matches `cheerpj-lock.json` |
+| `npx tsx scripts/time-gradings.ts <question folder>` | Times one grading of the starter and of every correct and broken solution, case by case, on the local JDK |
 
 ## How Java runs in the browser
 
@@ -226,13 +227,63 @@ times below are from a Windows laptop.
   70 of 80, every time). A warm-up through the same classes the concurrent
   tests use prevents it (3 of 3 fresh JVMs); one that also goes through
   another class (the given `MemoryTally` as well as the tests' `SlowTally`)
-  does not (0 of 2). So a warm-up uses exactly the tests' classes.
-  `e2e/m3-grading.spec.ts` checks this in a fresh JVM.
+  does not (0 of 2). So a warm-up uses exactly the tests' classes; for the
+  socket questions, the hidden server and test client live in `helpers/`
+  so the warm-up can use them too. `e2e/m3-grading.spec.ts` checks this in
+  a fresh JVM.
+- **The CheerpJ bug behind it** has a minimal reproduction in
+  `java/proofs/m3/cheerpj-thread-death` (plain CheerpJ, no sandbox) and a
+  draft report for Leaning Technologies (`REPORT.md` there). Eight threads
+  each calling a `synchronized` method that sleeps: in a fresh JVM, one
+  thread's first call throws an `ArrayIndexOutOfBoundsException` with no
+  message (10 of 10 JVMs on Windows and on Linux), and calling the method
+  once on one thread first prevents it (10 of 10). **Reading that
+  exception's stack trace crashes the browser tab on Linux** (10 of 10),
+  which is what crashed the nightly cold-threads proof; on Windows it
+  throws. So the sandbox never reads the stack trace of an
+  `ArrayIndexOutOfBoundsException` or `ClassCastException` without a
+  message (the JDK always gives those one): not in its uncaught-exception
+  handler, not when deciding whether CheerpJ threw, and not in the run's
+  code, whose `e.printStackTrace()` and `e.getStackTrace()` calls are
+  rewritten to guarded versions. The nightly `cheerpj-bug` job reruns the
+  reproduction, so a CheerpJ release that fixes it shows.
 - **CheerpJ's own failures are rerun once.** The sandbox notes an
   exception with no stack frame from the run's own classes (student, given,
   harness): one CheerpJ threw, not the student's code. Run results and
   harness cases report it as `runtimeFault`, a harness case with one
   fails, and the grader runs such a test once more before it counts.
+- **Concurrent cases are rerun up to twice** (tests.json `"concurrent":
+  true`, on the cases that start threads): a failed one runs up to two more
+  times, each in a fresh class loader and working folder, and passes if any
+  run passes. So that this can never let a wrong answer through, `npm run
+  verify` grades a question with concurrent cases 20 times per solution:
+  each correct solution must pass every concurrent case all 20 times, and
+  each broken one must fail a hidden case all 20 times, with the rule. The
+  repeated gradings run on up to 4 JVMs at once.
+- **Other correct solutions** (`solutions/<name>/`) are graded like
+  `solution/`: the thread questions have one per common style (a
+  synchronized method or block, a private lock object, a lock on the
+  store, a `Thread` subclass, a `Runnable` class, lambdas, threads kept in
+  a list). Q2's race cases hold every racer at `count()` until all have
+  called it, so a check-then-act `take()` oversells every time; the wait
+  ends after 300 ms at most, only the first racers wait, and none waits
+  when the caller holds the bank's or the store's lock. The slowest correct
+  style, a private lock with `take()` calling `count()` inside it, takes
+  3.5 s on that case against a 15 s limit.
+- **Sockets.** Every compile (the student's code, the given files and the
+  hidden tests) has `new Socket(...)` and `new ServerSocket(...)` rewritten
+  to `sivaku.net.FakeSocket` and `FakeServerSocket`: subclasses on an
+  in-memory network, so the JDK and the browser grade exactly alike. They
+  behave as TCP does for what students use (ordered lines, `readLine()`
+  returning `null` once the other side closes and everything is read,
+  half-close, `SO_TIMEOUT`, `BindException` for a port in use, port 0 for
+  a free one, closing a stream closes the socket). The network is reset
+  before and after each run, closing every server and socket, so no thread
+  of a run stays blocked in `accept()` or `readLine()`.
+- **Thread questions in 20 fresh browser JVMs** (`e2e/m3-threads-stress.spec.ts`,
+  nightly): every question with concurrent cases, every correct solution
+  graded and run as the Test and Run buttons do, and every broken one
+  graded, each round in a new browser context; no tab may crash.
 - **Swing questions (`swingPanel`).** The sandbox's Swing class loader
   (`RunLoader`) renames `JPanel`, `JButton`, `JLabel`, `JTextField`,
   `JComponent`, `AbstractButton` and `JTextComponent` to the fakes in
@@ -254,7 +305,9 @@ times below are from a Windows laptop.
   starter and broken suites with real JUnit too and requires the same
   result for every case, and `e2e/junit-runner.spec.ts` requires the
   same pass, fail or skip for every test of a tour of the assertions, on
-  the JDK and in the browser.
+  the JDK and in the browser. A run whose own class path has a real JUnit
+  jar (the nightly JUnit proof) gets real JUnit's `org.junit` classes, not
+  the stand-ins.
 - **Per-question reference sheets** (`meta.json` `reference`), two
   columns, from the exam's `sheets/` folder.
 
@@ -495,6 +548,7 @@ content/<course>/<exam>/
                      signatures, doc comments and stub bodies (return 0;)
     given/           the read-only files, shown as locked tabs; often a small Main.java
     solution/        the reference solution's editable files
+    solutions/<name>/ other correct solutions in other styles, graded like solution/
     broken/          a deliberately wrong solution; or several, one per subfolder
     tests.json       the test cases
     harness/         harness questions only: the hidden test driver
@@ -521,13 +575,13 @@ be worth points. Case points add up to the question's `points`, which is 4
 to 18 (the midterms' range); an exam's questions add up to 100 unless
 `exam.json` says `"draft": true`.
 
-The three kinds of test:
+The kinds of test:
 
 | `kind` | Each case has | Passes when |
 |---|---|---|
 | `stdio` | `stdin`, and `stdout`, `outputLine` or `labelledLines` | running `Main` with that input prints exactly that output, that line, or those lines |
 | `files` | `inputFiles` (left out for none), `outputFiles` (`null` means "must not exist"), optionally an output check as for `stdio` | the files after the run, and the output if given, are exactly as expected |
-| `harness` | `call`: a public static method of the harness class | the method returns rather than throwing |
+| `harness` | `call`: a public static method of the harness class; `"concurrent": true` if it starts threads (a failed one runs up to twice more) | the method returns rather than throwing |
 | `junit` | `implementation` (a folder in implementations/) and `expect`: `"pass"` or `"catch"`; tests.json names the `testClass` | the student's tests all pass on it ("pass", the correct class) or one fails ("catch", a buggy one); any failure on the correct class makes every case fail |
 
 For Ed's Midterm 1 pattern, one test per output line, give each case an

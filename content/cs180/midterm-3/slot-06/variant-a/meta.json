@@ -1,0 +1,8 @@
+{
+  "title": "Points keeper",
+  "points": 18,
+  "editable": ["PointsHandler.java"],
+  "readOnly": ["Main.java", "PointsServer.java"],
+  "warmUp": "Warmup",
+  "reference": "sockets"
+}

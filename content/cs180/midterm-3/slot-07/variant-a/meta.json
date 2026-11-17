@@ -1,0 +1,8 @@
+{
+  "title": "Ticket server",
+  "points": 16,
+  "editable": ["TicketServer.java"],
+  "readOnly": ["Main.java", "NumberStore.java", "MemoryStore.java"],
+  "warmUp": "Warmup",
+  "reference": "sockets"
+}

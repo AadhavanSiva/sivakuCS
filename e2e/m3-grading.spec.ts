@@ -2,7 +2,7 @@
 // graders, on the local JDK and in CheerpJ.
 //
 // - A test that fails inside CheerpJ rather than in the student's code is
-//   rerun once before it fails.
+//   rerun once before it fails; a failed concurrent case up to twice.
 // - A thread question's warm-up (meta.json warmUp) runs before Run and
 //   Test, so the CheerpJ failure where a thread silently dies never happens.
 // - The Swing fakes cover the components' methods, and Run draws a Swing
@@ -17,25 +17,8 @@ import type { GradeResult, Question } from "../lib/grading/types";
 import type { JavaBackend } from "../lib/java/backend";
 import type { JavaFiles } from "../lib/java/programs";
 import { LocalJava } from "../scripts/lib/local-java";
-import { openExam } from "./helpers";
+import { JVM_START_TIMEOUT, inBrowser, openExam } from "./helpers";
 
-const JVM_START_TIMEOUT = 4 * 60_000;
-
-async function openLab(page: Page) {
-  await page.goto("/lab/grade");
-  await expect(page.getByTestId("status")).toHaveAttribute("data-status", "ready", { timeout: JVM_START_TIMEOUT });
-}
-
-/** The browser's JVM as a JavaBackend, for gradeQuestion and direct sandbox calls. */
-async function inBrowser(page: Page): Promise<JavaBackend> {
-  await openLab(page);
-  const paths = await page.evaluate(() => window.sivakuJava!.paths);
-  return {
-    paths,
-    call: (method, args, options) =>
-      page.evaluate(([m, a, t]) => window.sivakuJava!.call(m, a, { timeoutMs: t }), [method, args, options?.timeoutMs] as const),
-  };
-}
 
 const summary = (r: GradeResult) => ({ score: r.score, cases: r.cases.map((c) => `${c.name}: ${c.passed ? "pass" : "fail"}`) });
 
@@ -43,21 +26,24 @@ const summary = (r: GradeResult) => ({ score: r.score, cases: r.cases.map((c) =>
 
 /**
  * A harness question whose student code starts a thread that dies with an
- * exception carrying no stack frames, as CheerpJ's own failures do: on the
- * first attempt only, or on every attempt. Case 2 reports how many attempts
- * Case 1 took, from a system property (which lasts as long as the JVM).
+ * exception carrying no stack frames, as CheerpJ's own failures do, on its
+ * first `failures` attempts. Case 2 checks how many attempts Case 1 took,
+ * from a system property (which lasts as long as the JVM).
  */
-function flaky(key: string, always: boolean): { question: Question; files: JavaFiles } {
+function flaky(
+  key: string,
+  { failures, attempts, concurrent = false }: { failures: number; attempts: number; concurrent?: boolean },
+): { question: Question; files: JavaFiles } {
   const harness = `import sivaku.harness.Check;
 public class Harness {
     public static void go() throws InterruptedException { Flaky.go(); }
-    public static void attempts() { Check.equal("attempts at Case 1", 2, Integer.getInteger("${key}", 0).intValue()); }
+    public static void attempts() { Check.equal("attempts at Case 1", ${attempts}, Integer.getInteger("${key}", 0).intValue()); }
 }`;
   const student = `public class Flaky {
     public static void go() throws InterruptedException {
         int n = Integer.getInteger("${key}", 0) + 1;
         System.setProperty("${key}", String.valueOf(n));
-        if (${always} || n == 1) {
+        if (n <= ${failures}) {
             Thread t = new Thread(() -> {
                 RuntimeException e = new ClassCastException();
                 e.setStackTrace(new StackTraceElement[0]);
@@ -76,7 +62,13 @@ public class Harness {
       starter: {},
       given: {},
       harness: { "Harness.java": harness },
-      tests: { kind: "harness", cases: [{ name: "Case 1", points: 1, call: "go" }, { name: "Case 2", points: 1, call: "attempts" }] },
+      tests: {
+        kind: "harness",
+        cases: [
+          { name: "Case 1", points: 1, call: "go", concurrent },
+          { name: "Case 2", points: 1, call: "attempts" },
+        ],
+      },
     },
     files: { "Flaky.java": student },
   };
@@ -84,19 +76,24 @@ public class Harness {
 
 async function checkRerun(java: JavaBackend) {
   const key = `sivaku.e2e.${Date.now()}.${Math.random().toString(36).slice(2)}`;
-  const once = flaky(`${key}.once`, false);
-  const passedOnRerun = await gradeQuestion(java, once.question, once.files);
-  expect(summary(passedOnRerun).cases, "faulting once: the rerun passes, and Case 1 took two attempts").toEqual([
-    "Case 1: pass",
-    "Case 2: pass",
-  ]);
-  const always = flaky(`${key}.always`, true);
-  const failed = await gradeQuestion(java, always.question, always.files);
-  expect(summary(failed).cases, "faulting every time: fails after exactly one rerun").toEqual(["Case 1: fail", "Case 2: pass"]);
-  expect(failed.cases[0].reason).toContain("A thread stopped unexpectedly");
+  const grade = async (name: string, options: Parameters<typeof flaky>[1]) => {
+    const { question, files } = flaky(`${key}.${name}`, options);
+    return gradeQuestion(java, question, files);
+  };
+  const once = await grade("once", { failures: 1, attempts: 2 });
+  expect(summary(once).cases, "faulting once: the rerun passes, and Case 1 took two attempts").toEqual(["Case 1: pass", "Case 2: pass"]);
+  const always = await grade("always", { failures: 99, attempts: 2 });
+  expect(summary(always).cases, "faulting every time: fails after exactly one rerun").toEqual(["Case 1: fail", "Case 2: pass"]);
+  expect(always.cases[0].reason).toContain("A thread stopped unexpectedly");
+
+  // A concurrent case: up to two more runs, whatever the reason it failed.
+  const twice = await grade("twice", { failures: 2, attempts: 3, concurrent: true });
+  expect(summary(twice).cases, "concurrent, failing twice: the third run passes").toEqual(["Case 1: pass", "Case 2: pass"]);
+  const thrice = await grade("thrice", { failures: 99, attempts: 3, concurrent: true });
+  expect(summary(thrice).cases, "concurrent, failing every time: fails after exactly two reruns").toEqual(["Case 1: fail", "Case 2: pass"]);
 }
 
-test("a test that fails inside CheerpJ, not in the student's code, is rerun once (JDK)", async () => {
+test("a test that fails inside CheerpJ is rerun once, a failed concurrent case up to twice (JDK)", async () => {
   const java = new LocalJava();
   try {
     await checkRerun(java);
@@ -105,7 +102,7 @@ test("a test that fails inside CheerpJ, not in the student's code, is rerun once
   }
 });
 
-test("a test that fails inside CheerpJ, not in the student's code, is rerun once (browser)", async ({ page }) => {
+test("a test that fails inside CheerpJ is rerun once, a failed concurrent case up to twice (browser)", async ({ page }) => {
   test.setTimeout(5 * 60_000);
   await checkRerun(await inBrowser(page));
 });
@@ -164,11 +161,19 @@ test("in a fresh browser JVM, the warm-up keeps every thread of a race alive", a
   expect(await race(await inBrowser(page), "warmUp=Warm")).toBe("Total: 80 [10, 10, 10, 10, 10, 10, 10, 10]");
 });
 
-test("in a fresh browser JVM without the warm-up, the same race (recorded, not required)", async ({ page }) => {
+test("in a fresh browser JVM without the warm-up, the same race loses a thread but never crashes the tab", async ({ page }) => {
   test.setTimeout(5 * 60_000);
   // At CheerpJ 5.0 one thread dies: "Total: 70 [10, 10, 10, 0, 10, 10, 10, 10]".
-  // Recorded rather than required, so a fixed CheerpJ does not fail the suite.
-  test.info().annotations.push({ type: "cold race", description: await race(await inBrowser(page), "") });
+  // Reading the stack trace of the exception CheerpJ throws then crashes the
+  // tab on Linux (java/proofs/m3/cheerpj-thread-death), so the sandbox never
+  // does. The total is recorded rather than required, so a fixed CheerpJ
+  // does not fail the suite; a crash fails it.
+  let crashed = false;
+  page.on("crash", () => (crashed = true));
+  const outcome = await race(await inBrowser(page), "");
+  expect(crashed).toBe(false);
+  expect(outcome).toMatch(/^Total: \d+ /);
+  test.info().annotations.push({ type: "cold race", description: outcome });
 });
 
 // ---- Midterm 3's broken solutions in the browser ----------------------------------

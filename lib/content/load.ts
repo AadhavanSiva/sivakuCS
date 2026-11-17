@@ -138,6 +138,16 @@ export function loadSolution(questionDir: string): JavaFiles {
 }
 
 /**
+ * Other correct solutions in different styles (solutions/<name>/: a
+ * synchronized block instead of a synchronized method, a Thread subclass
+ * instead of a Runnable...). Never sent to the browser; each must pass
+ * every case, as solution/ does.
+ */
+export function loadOtherSolutions(questionDir: string): Record<string, JavaFiles> {
+  return Object.fromEntries(Object.entries(folders(questionDir, "solutions")).map(([name, files]) => [`solutions/${name}`, files]));
+}
+
+/**
  * The deliberately wrong solutions: broken/ holding the editable files
  * directly is one variant; subfolders of broken/ are one variant each.
  */

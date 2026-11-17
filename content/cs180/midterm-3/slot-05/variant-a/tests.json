@@ -1,0 +1,16 @@
+{
+  "kind": "harness",
+  "timeLimitMs": 15000,
+  "cases": [
+    { "name": "Sample from the handout", "points": 0, "sample": true, "call": "sampleFromTheHandout" },
+    { "name": "Case 1", "points": 2, "call": "bookedOnFirstTry" },
+    { "name": "Case 2", "points": 2, "call": "bookedOnMiddleTry" },
+    { "name": "Case 3", "points": 2, "call": "bookedOnLastTry" },
+    { "name": "Case 4", "points": 2, "call": "everySiteFull" },
+    { "name": "Case 5", "points": 2, "call": "serverHangsUpEarly" },
+    { "name": "Case 6", "points": 1, "call": "oneLineAtATime" },
+    { "name": "Case 7", "points": 1, "call": "closesAfterBooking" },
+    { "name": "Case 8", "points": 1, "call": "closesWhenEverySiteIsFull" },
+    { "name": "Case 9", "points": 1, "call": "closesAfterServerHangsUp" }
+  ]
+}

@@ -1,3 +1,5 @@
+package sivaku.net;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -9,11 +11,12 @@ import java.net.SocketImpl;
 /**
  * An implementation that is never used, handed to Socket's and
  * ServerSocket's protected constructors so the fakes never create the
- * platform's real one (which CheerpJ cannot initialise).
+ * platform's real one, which CheerpJ cannot initialise. A method the fakes
+ * do not override fails with a SocketException instead of a real socket.
  */
 final class NoImpl extends SocketImpl {
-    private static IOException unsupported() {
-        return new SocketException("not a real socket");
+    private static SocketException unsupported() {
+        return new SocketException("Not supported here: sockets are simulated in the browser");
     }
 
     @Override

@@ -14,6 +14,13 @@ import {
 } from "../java/programs";
 import type { CaseResult, GradeResult, Question, TestCase } from "./types";
 
+/**
+ * A failed concurrent case (tests.json "concurrent": true) runs this many
+ * more times before it fails. npm run verify checks that every broken
+ * solution of a thread question still fails 20 gradings out of 20 with it.
+ */
+export const CONCURRENT_RERUNS = 2;
+
 /** Line endings never count: Windows JVMs and editors may produce \r\n. */
 const normalize = (text: string) => text.replace(/\r\n?/g, "\n");
 
@@ -272,9 +279,16 @@ async function runCase(
         }))!,
       ) as { passed: boolean; reason: string | null; runtimeFault: string | null };
     };
-    // A case that failed inside CheerpJ rather than in the student's code runs once more.
     let outcome = await once();
-    if (!outcome.passed && outcome.runtimeFault) outcome = await once();
+    if (testCase.concurrent) {
+      // A concurrent case depends on how CheerpJ schedules threads: it runs
+      // up to CONCURRENT_RERUNS more times, each in a fresh class loader and
+      // working folder, and passes if any run passes.
+      for (let rerun = 0; rerun < CONCURRENT_RERUNS && !outcome.passed; rerun++) outcome = await once();
+    } else if (!outcome.passed && outcome.runtimeFault) {
+      // A case that failed inside CheerpJ rather than in the student's code runs once more.
+      outcome = await once();
+    }
     return caseResult(testCase, index, outcome.passed, { reason: outcome.reason ?? undefined });
   }
 

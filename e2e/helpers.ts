@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import type { JavaBackend } from "../lib/java/backend";
 
 /** The signed-in test student the tests start as (e2e/auth.setup.ts). */
 export const STUDENT_STATE = "e2e/.auth/student.json";
@@ -20,4 +21,23 @@ export async function signInAs(page: Page, name: string) {
   await form.getByLabel("Test user name").fill(name);
   await form.getByRole("button", { name: "Test sign-in" }).click();
   await expect(page).not.toHaveURL(/\/(\?.*)?$/);
+}
+
+export const JVM_START_TIMEOUT = 4 * 60_000;
+
+/** The grading lab page, once its JVM is ready. */
+export async function openLab(page: Page) {
+  await page.goto("/lab/grade");
+  await expect(page.getByTestId("status")).toHaveAttribute("data-status", "ready", { timeout: JVM_START_TIMEOUT });
+}
+
+/** The page's JVM as a JavaBackend, for gradeQuestion and direct sandbox calls. */
+export async function inBrowser(page: Page): Promise<JavaBackend> {
+  await openLab(page);
+  const paths = await page.evaluate(() => window.sivakuJava!.paths);
+  return {
+    paths,
+    call: (method, args, options) =>
+      page.evaluate(([m, a, t]) => window.sivakuJava!.call(m, a, { timeoutMs: t }), [method, args, options?.timeoutMs] as const),
+  };
 }

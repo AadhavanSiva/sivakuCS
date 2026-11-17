@@ -1,0 +1,18 @@
+{
+  "kind": "harness",
+  "timeLimitMs": 15000,
+  "cases": [
+    { "name": "Sample from the handout", "points": 0, "sample": true, "call": "sampleFromTheHandout" },
+    { "name": "Case 1", "points": 2, "call": "addKeepsARunningTotal" },
+    { "name": "Case 2", "points": 2, "call": "showAtTheStartAndLater" },
+    { "name": "Case 3", "points": 2, "call": "resetStartsAgain" },
+    { "name": "Case 4", "points": 2, "call": "byeClosesAndReturns" },
+    { "name": "Case 5", "points": 2, "call": "unknownCommands" },
+    { "name": "Case 6", "points": 2, "call": "addWithoutAWholeNumber" },
+    { "name": "Case 7", "points": 2, "call": "emptyLine" },
+    { "name": "Case 8", "points": 1, "call": "severalClientsAtOnce", "concurrent": true },
+    { "name": "Case 9", "points": 1, "call": "hangUpWithoutBye" },
+    { "name": "Case 10", "points": 1, "call": "wrongNumberOfWords" },
+    { "name": "Case 11", "points": 1, "call": "oneReplyPerCommandAndAFreshStart" }
+  ]
+}

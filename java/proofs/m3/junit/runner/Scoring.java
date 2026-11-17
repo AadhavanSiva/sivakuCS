@@ -60,7 +60,21 @@ final class Scoring {
     }
 
     static String json(String s) {
-        return s == null ? "null" : "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ") + "\"";
+        if (s == null) {
+            return "null";
+        }
+        StringBuilder out = new StringBuilder("\"");
+        for (char c : s.toCharArray()) {
+            if (c == '"' || c == '\\') {
+                out.append('\\').append(c);
+            } else if (c < ' ') {
+                // Line breaks, tabs and other control characters: JSON forbids them raw.
+                out.append(c == '\n' ? " " : String.format("\\u%04x", (int) c));
+            } else {
+                out.append(c);
+            }
+        }
+        return out.append('"').toString();
     }
 
     private Scoring() {

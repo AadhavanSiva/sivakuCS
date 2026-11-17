@@ -23,7 +23,8 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # verify grades each thread question's solutions 20 times (about 6 minutes locally).
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
 

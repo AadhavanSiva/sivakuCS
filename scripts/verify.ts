@@ -1,17 +1,21 @@
 // npm run verify: every question is well formed, every reference solution
-// passes all its tests, and every broken/ solution fails at least one
-// hidden case. Grades on the local JDK 25 with the same code the browser
+// (solution/ and any in solutions/) passes all its tests, and every broken/
+// solution fails at least one hidden case. A question with concurrent cases
+// is graded 20 times: each correct solution must pass and each broken one
+// fail every time, with the rerun rule for concurrent cases. Grades on the local JDK 25 with the same code the browser
 // uses (lib/grading/grade.ts over the sandbox jar). Exits 1 on any problem.
 //
 //   npm run verify                    all exams under content/
 //   npm run verify -- cs180/samples   only exams or questions under this path
 import { existsSync } from "node:fs";
+import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import {
   CONTENT_ROOT,
   examDirs,
   loadBrokenVariants,
   loadExam,
+  loadOtherSolutions,
   loadQuestion,
   loadSolution,
   questionDirs,
@@ -24,6 +28,50 @@ import { LocalJava, localJavaMajor } from "./lib/local-java";
 import { realJunitOutcomes } from "./lib/real-junit";
 
 const filter = process.argv[2]?.replace(/\\/g, "/");
+
+/** How many times a question with concurrent cases is graded per solution. */
+const CONCURRENT_GRADINGS = 20;
+
+/**
+ * The repeated gradings run on several JVMs at once, each with its own
+ * working folder. The thread tests do not depend on timing (latches and
+ * instrumented sleeps), so a busy machine changes how long they take, not
+ * how they come out.
+ */
+class JvmPool {
+  private readonly idle: LocalJava[] = [];
+  private readonly all: LocalJava[] = [];
+  constructor(private readonly size: number) {}
+
+  /** Runs fn n times, at most `size` at once, and returns the results in order. */
+  async repeat<T>(n: number, fn: (java: LocalJava) => Promise<T>): Promise<T[]> {
+    const results: T[] = new Array(n);
+    let next = 0;
+    const lane = async () => {
+      const java = this.idle.pop() ?? this.add();
+      try {
+        while (next < n) {
+          const i = next++;
+          results[i] = await fn(java);
+        }
+      } finally {
+        this.idle.push(java);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(this.size, n) }, lane));
+    return results;
+  }
+
+  private add(): LocalJava {
+    const java = new LocalJava();
+    this.all.push(java);
+    return java;
+  }
+
+  async close() {
+    await Promise.all(this.all.map((java) => java.close()));
+  }
+}
 
 type Problems = string[];
 
@@ -103,6 +151,9 @@ function checkQuestion(dir: string, question: Question, problems: Problems) {
       problems.push(`tests.json: ${c.name} checks neither files nor output`);
     }
     if (tests.kind === "harness" && !c.call) problems.push(`tests.json: ${c.name} has no "call"`);
+    if (c.concurrent !== undefined && (c.concurrent !== true || tests.kind !== "harness")) {
+      problems.push(`tests.json: ${c.name}: "concurrent": true is for harness cases only`);
+    }
     if (tests.kind === "junit") {
       if (!c.implementation || !question.implementations?.[c.implementation]) {
         problems.push(`tests.json: ${c.name} needs an implementation in implementations/`);
@@ -115,6 +166,7 @@ function checkQuestion(dir: string, question: Question, problems: Problems) {
     if (!cases.some((c) => c.expect === "pass")) problems.push("tests.json: a junit question needs a pass-on-correct case");
   }
   if (meta.reference && !question.reference) problems.push(`meta.json: reference sheet sheets/${meta.reference}.md is missing`);
+  if (meta.warmUp && !cases.some((c) => c.concurrent)) problems.push('tests.json: a question with a warmUp needs its threaded cases marked "concurrent": true');
   if (meta.warmUp && !(`${meta.warmUp}.java` in (question.helpers ?? {}))) {
     problems.push(`helpers/${meta.warmUp}.java is missing (meta.json warmUp)`);
   }
@@ -139,6 +191,7 @@ async function main() {
   }
 
   const java = new LocalJava();
+  const pool = new JvmPool(Math.max(1, Math.min(4, availableParallelism() - 1)));
   let failures = 0;
   let questionsChecked = 0;
   try {
@@ -160,6 +213,7 @@ async function main() {
         const question = loadQuestion(dir);
         if (filter && !question.id.startsWith(filter) && !filter.startsWith(question.id) && filter !== exam.id) continue;
         questionsChecked++;
+        const startedAt = Date.now();
         const problems: Problems = [];
         checkQuestion(dir, question, problems);
 
@@ -174,8 +228,13 @@ async function main() {
         }
 
         if (problems.length === 0) {
-          const solution = await gradeQuestion(java, question, loadSolution(dir));
-          if (solution.passed !== solution.total) problems.push(`solution/ fails:\n${indent(describe(solution))}`);
+          const correct = { "solution/": loadSolution(dir), ...loadOtherSolutions(dir) };
+          for (const [name, files] of Object.entries(correct)) {
+            const extra = Object.keys(files).filter((f) => !question.meta.editable.includes(f));
+            if (extra.length) problems.push(`${name} has files that are not editable: ${extra.join(", ")}`);
+            const graded = await gradeQuestion(java, question, files);
+            if (graded.passed !== graded.total) problems.push(`${name} fails:\n${indent(describe(graded))}`);
+          }
           if (question.tests.kind === "junit") {
             // The starter is one test that passes on the correct class and catches nothing.
             const starter = await gradeQuestion(java, question, question.starter);
@@ -192,9 +251,43 @@ async function main() {
             const hiddenFailed = broken.cases.some((c) => !c.sample && !c.passed);
             if (!hiddenFailed) problems.push(`${name}/ passes every hidden case; it must fail at least one`);
           }
+          // Thread questions: the outcome must not depend on the scheduler.
+          // The concurrent cases (the only ones that can vary) are graded 20
+          // times for each correct solution; each broken one must fail a
+          // hidden case in all 20 gradings.
+          const concurrent = question.tests.cases.filter((c) => c.concurrent);
+          if (concurrent.length > 0) {
+            const onlyConcurrent: Question = { ...question, tests: { ...question.tests, cases: concurrent } };
+            for (const [name, files] of Object.entries(correct)) {
+              const gradings = await pool.repeat(CONCURRENT_GRADINGS, (jvm) => gradeQuestion(jvm, onlyConcurrent, files));
+              const passedAll = gradings.filter((g) => g.passed === g.total).length;
+              const failures = new Set(gradings.flatMap((g) => g.cases.filter((c) => !c.passed).map((c) => `${c.name}: ${c.reason ?? "failed"}`)));
+              if (passedAll !== CONCURRENT_GRADINGS) {
+                problems.push(`${name} passes every concurrent case in ${passedAll} of ${CONCURRENT_GRADINGS} gradings:\n${indent([...failures].join("\n"))}`);
+              }
+            }
+            for (const [name, files] of Object.entries(variants)) {
+              // A hidden case that is not concurrent does not depend on the
+              // scheduler: if one fails, every grading fails it.
+              const once = await gradeQuestion(java, question, files);
+              const deterministic = once.cases.some((c, i) => !c.sample && !c.passed && !question.tests.cases[i].concurrent);
+              if (deterministic) continue;
+              // Otherwise each grading must fail a concurrent case; it stops at the first that does.
+              const hidden = concurrent.filter((c) => !c.sample);
+              const gradings = await pool.repeat(CONCURRENT_GRADINGS, async (jvm) => {
+                for (const c of hidden) {
+                  const one: Question = { ...question, tests: { ...question.tests, cases: [c] } };
+                  if ((await gradeQuestion(jvm, one, files)).passed === 0) return true;
+                }
+                return false;
+              });
+              const caught = gradings.filter(Boolean).length;
+              if (caught !== CONCURRENT_GRADINGS) problems.push(`${name}/ fails a hidden case in only ${caught} of ${CONCURRENT_GRADINGS} gradings`);
+            }
+          }
           // The small JUnit runner must score every suite as real JUnit does.
           if (question.tests.kind === "junit") {
-            const suites = { solution: loadSolution(dir), starter: question.starter, ...variants };
+            const suites = { ...correct, starter: question.starter, ...variants };
             for (const [name, files] of Object.entries(suites)) {
               const small = (await gradeQuestion(java, question, files)).cases.map((c) => c.passed);
               const real = await realJunitOutcomes(question, files);
@@ -205,7 +298,8 @@ async function main() {
           }
         }
 
-        const label = `${question.id.slice(exam.id.length + 1)} (${question.meta.points} pts, ${question.tests.kind})`;
+        const seconds = Math.round((Date.now() - startedAt) / 1000);
+        const label = `${question.id.slice(exam.id.length + 1)} (${question.meta.points} pts, ${question.tests.kind}${seconds >= 5 ? `, ${seconds} s` : ""})`;
         if (problems.length === 0) {
           console.log(`  ✓ ${label}`);
         } else {
@@ -217,6 +311,7 @@ async function main() {
     }
   } finally {
     await java.close();
+    await pool.close();
   }
 
   if (questionsChecked === 0) {

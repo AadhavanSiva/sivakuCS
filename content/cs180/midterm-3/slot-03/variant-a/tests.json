@@ -2,14 +2,14 @@
   "kind": "harness",
   "timeLimitMs": 15000,
   "cases": [
-    { "name": "Sample from the handout", "points": 0, "sample": true, "call": "sampleFromTheHandout" },
+    { "name": "Sample from the handout", "points": 0, "sample": true, "call": "sampleFromTheHandout", "concurrent": true },
     { "name": "Case 1", "points": 2, "call": "workerWholeList" },
     { "name": "Case 2", "points": 2, "call": "workerMiddleSlice" },
     { "name": "Case 3", "points": 2, "call": "workerOneNegativeReading" },
-    { "name": "Case 4", "points": 2, "call": "oneWorker" },
-    { "name": "Case 5", "points": 2, "call": "oneWorkerPerReading" },
-    { "name": "Case 6", "points": 2, "call": "unevenSlicesLastIndex" },
-    { "name": "Case 7", "points": 3, "call": "everyIndexOnceByAWorker" },
-    { "name": "Case 8", "points": 3, "call": "workersRunTogether" }
+    { "name": "Case 4", "points": 2, "call": "oneWorker", "concurrent": true },
+    { "name": "Case 5", "points": 2, "call": "oneWorkerPerReading", "concurrent": true },
+    { "name": "Case 6", "points": 2, "call": "unevenSlicesLastIndex", "concurrent": true },
+    { "name": "Case 7", "points": 3, "call": "everyIndexOnceByAWorker", "concurrent": true },
+    { "name": "Case 8", "points": 3, "call": "workersRunTogether", "concurrent": true }
   ]
 }

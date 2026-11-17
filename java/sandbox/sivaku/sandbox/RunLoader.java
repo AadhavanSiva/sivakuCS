@@ -36,8 +36,29 @@ final class RunLoader extends URLClassLoader {
         this.swing = swing;
     }
 
+    /**
+     * JUnit's packages, which the sandbox carries a small stand-in for. When
+     * the run's own class path has the real ones (a JUnit jar), those win:
+     * real JUnit cannot find tests through the stand-in's annotations.
+     */
+    private static boolean junit(String name) {
+        return name.startsWith("org.junit.") || name.startsWith("org.opentest4j.");
+    }
+
     @Override
     protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+        if (junit(name) && findResource(name.replace('.', '/') + ".class") != null) {
+            synchronized (getClassLoadingLock(name)) {
+                Class<?> loaded = findLoadedClass(name);
+                if (loaded == null) {
+                    loaded = findClass(name);
+                }
+                if (resolve) {
+                    resolveClass(loaded);
+                }
+                return loaded;
+            }
+        }
         if (!swing) {
             return super.loadClass(name, resolve);
         }
